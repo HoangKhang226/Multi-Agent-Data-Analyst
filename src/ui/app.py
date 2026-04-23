@@ -2,7 +2,20 @@ import streamlit as st
 import requests
 import json
 import os
+import sys
 from pathlib import Path
+
+# Add project root to path to allow importing 'src'
+current_dir = Path(__file__).parent
+project_root = current_dir.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from src.core.config import settings
+except ImportError:
+    st.error(f"Cannot import 'src'. sys.path: {sys.path}")
+    st.stop()
 
 # --- Configuration ---
 API_BASE_URL = "http://localhost:8000"
@@ -25,9 +38,15 @@ with st.sidebar:
     
     # Provider selection
     llm_provider = st.selectbox(
-        "LLM Provider",
+        "LLM Provider (Graph)",
         options=["gemini", "ollama"],
-        index=0
+        index=1 if settings.graph_provider == "ollama" else 0
+    )
+
+    memory_provider = st.selectbox(
+        "Memory Provider (Mem0)",
+        options=["gemini", "ollama"],
+        index=1 if settings.memory_provider == "ollama" else 0
     )
     
     st.divider()
@@ -57,8 +76,8 @@ with st.sidebar:
         else:
             with st.spinner("Đang xử lý dữ liệu..."):
                 try:
-                    # Ingest Table
-                    files_table = {"file": (table_file.name, table_file.getvalue(), table_file.type)}
+                    # Ingest Table - FastAPI expects field name 'files'
+                    files_table = [("files", (table_file.name, table_file.getvalue(), table_file.type))]
                     res_table = requests.post(
                         f"{API_BASE_URL}/ingest",
                         files=files_table,
@@ -68,14 +87,15 @@ with st.sidebar:
                     if res_table.status_code == 200:
                         st.success(f"✅ Đã xử lý file bảng: {table_file.name}")
                         data = res_table.json()
-                        st.session_state["dataframe_head"] = data.get("summary", "")
-                        st.session_state["dataframe_info"] = data.get("info", "")
+                        # data is a list [IngestResponse]
+                        st.session_state["dataframe_head"] = data[0].get("summary", "")
+                        st.session_state["dataframe_info"] = data[0].get("info", "")
                     else:
                         st.error(f"❌ Lỗi xử lý bảng: {res_table.text}")
 
                     # Ingest Doc (if provided)
                     if doc_file:
-                        files_doc = {"file": (doc_file.name, doc_file.getvalue(), doc_file.type)}
+                        files_doc = [("files", (doc_file.name, doc_file.getvalue(), doc_file.type))]
                         res_doc = requests.post(
                             f"{API_BASE_URL}/ingest",
                             files=files_doc,
@@ -83,7 +103,7 @@ with st.sidebar:
                         )
                         if res_doc.status_code == 200:
                             st.success(f"✅ Đã xử lý tài liệu: {doc_file.name}")
-                            st.session_state["content_summary"] = res_doc.json().get("summary", "")
+                            st.session_state["content_summary"] = res_doc.json()[0].get("summary", "")
                         else:
                             st.error(f"❌ Lỗi xử lý tài liệu: {res_doc.text}")
                     else:
@@ -135,6 +155,7 @@ if prompt := st.chat_input("Hỏi gì đó về dữ liệu của bạn..."):
                 "question": prompt,
                 "user_id": "guest",
                 "llm_provider": llm_provider,
+                "memory_provider": memory_provider,
                 "content_summary": st.session_state.get("content_summary", ""),
                 "dataframe_head": st.session_state.get("dataframe_head", ""),
                 "dataframe_info": st.session_state.get("dataframe_info", "")

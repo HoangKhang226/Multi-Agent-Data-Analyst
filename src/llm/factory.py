@@ -13,7 +13,7 @@ from llama_index.core import Settings
 class LLMFactory:
     """Factory for creating pre-configured LLM clients by purpose.
 
-    Selects the provider (Gemini or Ollama) from ``settings.llm.provider``
+    Selects the provider (Gemini or Ollama) from ``settings.graph_provider``
     and picks the appropriate model name + temperature for each purpose.
 
     Supported purposes
@@ -33,7 +33,7 @@ class LLMFactory:
         Args:
             purpose: Intended use case — ``"summary"``, ``"rag"``, or ``"classifier"``.
             provider: Optional provider override (``"gemini"`` or ``"ollama"``).
-                     If None, defaults to ``settings.llm.provider``.
+                     If None, defaults to ``settings.graph_provider``.
 
         Returns:
             A :class:`GeminiClient` or :class:`OllamaClient` with the
@@ -44,7 +44,7 @@ class LLMFactory:
             ValueError: If the provider is not ``"gemini"`` or ``"ollama"``.
         """
         if provider is None:
-            provider = settings.llm.provider.lower()
+            provider = settings.graph_provider.lower()
         else:
             provider = provider.lower()
 
@@ -53,7 +53,8 @@ class LLMFactory:
             provider = "gemini"
 
         if purpose == "summary":
-            temperature = settings.llm.temperature
+            # Default temperature for summary tasks
+            temperature = 0.7 
             if provider == "gemini":
                 model = settings.gemini.summary_model
                 logger.debug(
@@ -73,13 +74,13 @@ class LLMFactory:
             # Both tasks require deterministic output — force temperature to 0
             temperature = 0.0
             if provider == "gemini":
-                model = settings.gemini.rag_model
+                model = settings.gemini.model
                 logger.debug(
                     f"Creating Gemini LLM for {purpose.upper()} (model: {model}, temp: {temperature})"
                 )
                 return GeminiClient(model_name=model, temperature=temperature)
             elif provider == "ollama":
-                model = settings.ollama.rag_model
+                model = settings.ollama.model
                 logger.debug(
                     f"Creating Ollama LLM for {purpose.upper()} (model: {model}, temp: {temperature})"
                 )
@@ -98,7 +99,7 @@ class LLMFactory:
         This prevents LlamaIndex from defaulting to OpenAI for internal tasks.
         """
         if provider is None:
-            provider = settings.llm.provider.lower()
+            provider = settings.graph_provider.lower()
         else:
             provider = provider.lower()
             
@@ -112,7 +113,7 @@ class LLMFactory:
             from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
             
             Settings.llm = GoogleGenAI(
-                model=settings.gemini.rag_model,
+                model=settings.gemini.model,
                 api_key=settings.google_api_key
             )
             Settings.embed_model = GoogleGenAIEmbedding(
@@ -125,7 +126,7 @@ class LLMFactory:
             from llama_index.embeddings.ollama import OllamaEmbedding
             
             Settings.llm = Ollama(
-                model=settings.ollama.rag_model,
+                model=settings.ollama.model,
                 base_url=settings.ollama.base_url
             )
             Settings.embed_model = OllamaEmbedding(

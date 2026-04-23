@@ -3,20 +3,21 @@ app:
   version: "1.0.0"
   debug: true
 
-llm:
-  provider: "ollama" # "gemini" | "ollama"
-  rag_reranker_model: "BAAI/bge-reranker-v2-m3"
-  temperature: 0.7
-
 gemini:
+  model: "gemini-2.5-flash"
   summary_model: "gemini-2.5-flash"
-  rag_model: "gemini-2.5-flash"
 
 ollama:
   base_url: "http://localhost:11434"
+  model: "qwen3:8b"
   summary_model: "qwen3:8b"
-  rag_model: "qwen3:8b"
   embed_model: "nomic-embed-text"
+
+rag:
+  reranker: "BAAI/bge-reranker-v2-m3"
+
+graph_provider: "ollama" # "gemini" | "ollama"
+memory_provider: "ollama" # "gemini" | "ollama"
 
 embedding:
   google: "gemini-embedding-001"

@@ -10,28 +10,24 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _SETTING_FILE = _PROJECT_ROOT / "config" / "setting.yaml"
 
 
-class LLMConfig(BaseModel):
-    """Configuration for language model selection and sampling parameters."""
-
-    provider: str = "ollama"  # "gemini" | "ollama"
-    rag_reranker_model: str
-    temperature: float
-
-
 class GeminiConfig(BaseModel):
     """Configuration for Google Gemini models."""
 
+    model: str = "gemini-2.5-flash"
     summary_model: str = "gemini-2.5-flash"
-    rag_model: str = "gemini-2.5-flash"
 
 
 class OllamaConfig(BaseModel):
     """Configuration for the locally hosted Ollama inference server."""
 
     base_url: str = "http://localhost:11434"
+    model: str = "qwen3:8b"
     summary_model: str = "qwen3:8b"
-    rag_model: str = "qwen3:8b"
     embed_model: str = "nomic-embed-text"
+
+class RagConfig(BaseModel):
+    """Configuration for RAG specific parameters."""
+    reranker: str = "BAAI/bge-reranker-v2-m3"
 
 class EmbeddingConfig(BaseModel):
     """Configuration for the embedding model used in vector retrieval."""
@@ -101,9 +97,11 @@ class Settings(BaseSettings):
     langsmith_api_key: str = Field(..., alias="LANGSMITH_API_KEY")
 
     app: AppConfig
-    llm: LLMConfig
+    graph_provider: str
+    memory_provider: str
     gemini: GeminiConfig = GeminiConfig()
     ollama: OllamaConfig
+    rag: RagConfig
     embedding: EmbeddingConfig
     retrieval: RetrievalConfig
     chunking: ChunkingConfig
@@ -160,6 +158,7 @@ try:
 except Exception as e:
     logger.error(f"Error while loading settings: {e}")
     raise
+
 
 if __name__ == "__main__":
     logger.info("Running main script")

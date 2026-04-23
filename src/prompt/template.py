@@ -163,10 +163,14 @@ cho yêu cầu bên dưới. Đoạn này sẽ dùng để tìm kiếm ngữ ngh
 # ---------------------------------------------------------------------------
 
 LLM_KNOWLEDGE_PROMPT = """\
-Trả lời câu hỏi / yêu cầu bên dưới dựa trên kiến thức chung của bạn.
+## Thông tin người dùng
+{user_memory_section}
+
+## Nhiệm vụ
+Trả lời câu hỏi / yêu cầu bên dưới dựa trên kiến thức của bạn VÀ thông tin người dùng được cung cấp ở trên.
 Trả lời ngắn gọn, chính xác, dùng Markdown nếu hữu ích.
 
-## Yêu cầu
+## Yêu cầu cụ thể
 {current_task}
 """
 
@@ -315,9 +319,9 @@ Nhiệm vụ của bạn là tổng hợp các KẾT QUẢ THÔ từ nhiều cô
    - Nhấn mạnh các số liệu quan trọng bằng **chữ đậm**.
 4. **Trích dẫn nguồn**: Ghi rõ nguồn cho từng ý: (từ tài liệu), (từ web), (từ phân tích dữ liệu).
 5. **Hình ảnh/Biểu đồ**: Nếu có thông tin về biểu đồ (CHART_PATH), hãy thông báo: "📊 **Biểu đồ đã được tạo và hiển thị bên dưới.**"
-6. **Xử lý Lỗi (QUAN TRỌNG)**:
-   - Nếu một kết quả thô có nhãn **[ERROR]**, hãy giải thích lỗi đó cho người dùng một cách trung thực. Ví dụ: "Không tìm thấy cột 'Lợi nhuận' trong tập dữ liệu."
-   - **Tuyệt đối không** sử dụng thông tin từ "Bộ nhớ dài hạn" để suy đoán hoặc trả lời thay cho một sub-task bị lỗi nếu thông tin đó không liên quan trực tiếp đến yêu cầu hiện tại.
+6. **Xử lý Lỗi và Bộ nhớ (QUAN TRỌNG)**:
+   - Nếu một kết quả thô có nhãn **[ERROR]**, hãy giải thích lỗi đó cho người dùng một cách trung thực.
+   - **Đặc biệt**: Sử dụng thông tin từ "Bộ nhớ dài hạn" ({user_memory_section}) làm nguồn sự thật cao nhất cho các thông tin cá nhân (tên, chức vụ, sở thích) hoặc ngữ cảnh lịch sử. Nếu sub-task trả về "không biết" về thông tin cá nhân nhưng bộ nhớ có sẵn, hãy ƯU TIÊN thông tin từ bộ nhớ.
 7. **Nhận xét & Khuyến nghị (Insights)**:
    - Nếu không có lỗi, dựa trên dữ liệu, hãy đưa ra ít nhất 1-2 nhận xét sâu sắc (ví dụ: xu hướng, điểm bất thường).
    - Nếu có lỗi, hãy gợi ý cách khắc phục (ví dụ: kiểm tra lại tên cột hoặc upload đúng file).
@@ -349,21 +353,27 @@ Hoặc nếu bạn muốn, mình có thể tự chọn cách xử lý phù hợp
 TECHNICAL_ERROR_RESPONSE = "Đã xảy ra lỗi khi xử lý yêu cầu của bạn: {error}"
 
 PROMPT_EXTRACT_MEMORY = """
-Extract ONLY useful long-term memory.
+Bạn là công cụ trích xuất thông tin người dùng từ hội thoại.
+Nhiệm vụ của bạn là liệt kê các "sự thật" (facts) quan trọng về người dùng.
 
-DO NOT include:
-- temporary requests
-- tool actions
-- assistant responses
+Chỉ bao gồm các thông tin thuộc loại sau:
+- Sở thích (preferences)
+- Thói quen (habits)
+- Kỹ năng (skills)
+- Mục tiêu (goals)
+- Insight quan trọng
 
-ONLY include:
-- user preferences
-- repeated patterns
-- important insights
+Bỏ qua:
+- Các yêu cầu tạm thời (ví dụ: "hãy phân tích cột sales")
+- Câu hỏi một lần
+- Các nội dung trả lời của Assistant (chỉ tập trung vào thông tin về User)
 
-Conversation:
+Quy tắc trích xuất:
+- Mỗi sự thật là 1 câu ngắn gọn.
+- Không gộp nhiều thông tin vào 1 câu.
+- Nếu không có thông tin hữu ích nào, trả về danh sách trống.
+
+Hội thoại:
 User: {question}
 Assistant: {answer}
-
-Return 1 short sentence. If nothing useful → return EMPTY.
 """

@@ -67,6 +67,7 @@ class ChatRequest(BaseModel):
     question: str
     user_id: Optional[str] = "guest"
     llm_provider: Optional[str] = None
+    memory_provider: Optional[str] = None
     embedding_provider: Optional[str] = None
     # Optional pre-loaded summary (e.g. from Streamlit session)
     content_summary: Optional[str] = ""
@@ -196,8 +197,9 @@ async def chat(request: ChatRequest):
     The pipeline includes Mem0 memory retrieval/update for personalised conversations.
     Pass `user_id` to enable per-user long-term memory.
     """
-    llm_provider = request.llm_provider or settings.llm.provider
-    embedding_provider = request.embedding_provider or settings.llm.provider
+    llm_provider = request.llm_provider or settings.graph_provider
+    memory_provider = request.memory_provider or settings.memory_provider
+    embedding_provider = request.embedding_provider or settings.graph_provider
     user_id = request.user_id or "guest"
 
     # Hot-swap LlamaIndex settings
@@ -229,6 +231,7 @@ async def chat(request: ChatRequest):
 
     state = make_initial_state(
         provider=llm_provider,
+        memory_provider=memory_provider,
         collection_name=settings.storage.collection_name,
         user_id=user_id,
     )

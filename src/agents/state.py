@@ -50,6 +50,7 @@ class AgentState(TypedDict):
     session_id: Annotated[Optional[str], write_once]
     user_id: Annotated[Optional[str], write_once]
     llm_provider: Annotated[Optional[str], write_once]
+    memory_provider: Annotated[Optional[str], write_once]
     collection_name: Annotated[Optional[str], write_once]
 
     # ------------------------------------------------------------------
@@ -122,6 +123,7 @@ def create_initial_state() -> AgentState:
         "session_id": None,
         "user_id": "guest",
         "llm_provider": None,
+        "memory_provider": None,
         "collection_name": None,
 
         "question": None,

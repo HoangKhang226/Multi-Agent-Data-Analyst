@@ -156,6 +156,7 @@ def build_graph(df=None):
 
 def make_initial_state(
     provider: str = None,
+    memory_provider: str = None,
     collection_name: str = None,
     user_id: str = None,
 ) -> AgentState:
@@ -164,6 +165,8 @@ def make_initial_state(
     
     if provider:
         state["llm_provider"] = provider
+    if memory_provider:
+        state["memory_provider"] = memory_provider
     if collection_name:
         state["collection_name"] = collection_name
     if user_id:

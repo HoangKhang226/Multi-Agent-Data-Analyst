@@ -19,7 +19,6 @@ from src.prompt.template import (
     PLANNER_PROMPT,
     KNOWLEDGE_ROUTER_PROMPT,
     HYDE_PROMPT,
-    VALIDATOR_PROMPT,
     SYNTHESIZER_PROMPT,
     USER_MEMORY_SECTION,
     REJECTION_FALLBACK_ANSWER,
@@ -77,7 +76,7 @@ def _get_structured_llm(provider: Optional[str], purpose: str, schema):
 
 
 def _provider(state: AgentState) -> Optional[str]:
-    return state.get("llm_provider") or settings.llm.provider
+    return state.get("llm_provider") or settings.graph_provider
 
 
 # ---------------------------------------------------------------------------

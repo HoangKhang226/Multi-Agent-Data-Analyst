@@ -12,8 +12,6 @@ import matplotlib
 matplotlib.use('Agg')
 import pandas as pd
 import uuid
-import io
-import contextlib
 import re
 
 from langgraph.graph import END
@@ -36,7 +34,7 @@ from src.utils.logger import logger
 
 
 def _provider(state: AgentState) -> Optional[str]:
-    return state.get("llm_provider") or settings.llm.provider
+    return state.get("llm_provider") or settings.graph_provider
 
 
 def _get_llm(provider: Optional[str], purpose: str):
@@ -93,6 +91,7 @@ def fan_out_subtasks(state: AgentState) -> List[Send]:
         "dataframe_head": state.get("dataframe_head"),
         "user_id": state.get("user_id"),
         "content_summary": state.get("content_summary"),
+        "user_memory": state.get("user_memory"),
     }
 
     return [
@@ -191,7 +190,11 @@ def llm_node(state: AgentState) -> dict:
     if not current_task:
         return {}
 
-    prompt = LLM_KNOWLEDGE_PROMPT.format(current_task=current_task["description"])
+    from src.agents.node import _build_memory_section
+    prompt = LLM_KNOWLEDGE_PROMPT.format(
+        current_task=current_task["description"],
+        user_memory_section=_build_memory_section(state)
+    )
 
     try:
         llm = _get_llm(provider, "rag")

@@ -26,7 +26,7 @@ async def retrieve_memory_node(state: AgentState) -> dict:
 
     logger.info(f"[MemoryNode] Retrieving memory for user '{user_id}'...")
 
-    user_memory = await get_user_facts(query=question, user_id=user_id)
+    user_memory = await get_user_facts(query=question, user_id=user_id, provider=state.get("memory_provider"))
 
     if user_memory:
         logger.info(f"[MemoryNode] Found memory context for '{user_id}'.")
@@ -52,10 +52,14 @@ async def update_memory_node(state: AgentState) -> dict:
         return {}
 
     logger.info(f"[MemoryNode] Saving conversation turn for user '{user_id}'...")
-    memory = await extract_memory(question, final_answer)
-    if memory:
-        await save_user_facts(
-            messages=[{"role": "user", "content": memory}],
-            user_id=user_id
-        )
-    return {}
+    
+    # We pass the conversation context to save_user_facts which handles extraction
+    saved_facts = await save_user_facts(
+        messages=[
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": final_answer}
+        ],
+        user_id=user_id,
+        provider=state.get("memory_provider")
+    )
+    return {"saved_facts": saved_facts}
