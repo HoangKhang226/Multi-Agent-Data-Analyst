@@ -26,7 +26,7 @@ from src.prompt.template import (
     TECHNICAL_ERROR_RESPONSE,
 )
 from src.utils.logger import logger
-from src.llm.factory import LLLMFactory
+from src.llm.factory import LLMFactory
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +69,11 @@ def _build_memory_section(state: AgentState) -> str:
 
 
 def _get_llm(provider: Optional[str], purpose: str):
-    return LLLMFactory.create_client(purpose=purpose, provider=provider).get_llm()
+    return LLMFactory.create_client(purpose=purpose, provider=provider).get_llm()
 
 
 def _get_structured_llm(provider: Optional[str], purpose: str, schema):
-    return LLLMFactory.create_client(purpose=purpose, provider=provider).get_structed_llm(schema)
+    return LLMFactory.create_client(purpose=purpose, provider=provider).get_structed_llm(schema)
 
 
 def _provider(state: AgentState) -> Optional[str]:

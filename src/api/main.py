@@ -26,7 +26,7 @@ from src.core.orchestrator import IngestionOrchestrator
 from src.llm.embeddings import EmbeddingFactory
 from src.retrieval.vector_db import VectorDBManager
 from src.agents.graph import build_graph, make_initial_state
-from src.llm.factory import LLLMFactory
+from src.llm.factory import LLMFactory
 from src.memory.long_term import _get_memory
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ app.mount("/charts", StaticFiles(directory="output_charts"), name="charts") # bi
 async def on_startup():
     """Configure LlamaIndex global settings once on startup."""
     try:
-        LLLMFactory.configure_llama_index_settings()
+        LLMFactory.configure_llama_index_settings()
         logger.info("[startup] LlamaIndex global settings configured.")
     except Exception as e:
         logger.error(f"[startup] Failed to configure LlamaIndex settings: {e}")
@@ -201,7 +201,7 @@ async def chat(request: ChatRequest):
     user_id = request.user_id or "guest"
 
     # Hot-swap LlamaIndex settings
-    LLLMFactory.configure_llama_index_settings(provider=llm_provider)
+    LLMFactory.configure_llama_index_settings(provider=llm_provider)
 
     # Load summary if not provided
     content_summary = request.content_summary or ""

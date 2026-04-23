@@ -23,7 +23,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 
 from src.agents.state import AgentState, SubTask, TaskResult
 from src.prompt.template import LLM_KNOWLEDGE_PROMPT
-from src.llm.factory import LLLMFactory
+from src.llm.factory import LLMFactory
 from src.llm.embeddings import EmbeddingFactory
 from src.retrieval.vector_db import VectorDBManager
 from src.core.config import settings
@@ -40,7 +40,7 @@ def _provider(state: AgentState) -> Optional[str]:
 
 
 def _get_llm(provider: Optional[str], purpose: str):
-    return LLLMFactory.create_client(purpose=purpose, provider=provider).get_llm()
+    return LLMFactory.create_client(purpose=purpose, provider=provider).get_llm()
 
 
 def _get_vector_db(provider: Optional[str]) -> VectorDBManager:

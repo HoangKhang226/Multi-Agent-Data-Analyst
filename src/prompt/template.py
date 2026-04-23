@@ -347,3 +347,23 @@ Hoặc nếu bạn muốn, mình có thể tự chọn cách xử lý phù hợp
 """
 
 TECHNICAL_ERROR_RESPONSE = "Đã xảy ra lỗi khi xử lý yêu cầu của bạn: {error}"
+
+PROMPT_EXTRACT_MEMORY = """
+Extract ONLY useful long-term memory.
+
+DO NOT include:
+- temporary requests
+- tool actions
+- assistant responses
+
+ONLY include:
+- user preferences
+- repeated patterns
+- important insights
+
+Conversation:
+User: {question}
+Assistant: {answer}
+
+Return 1 short sentence. If nothing useful → return EMPTY.
+"""

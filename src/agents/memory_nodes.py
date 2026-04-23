@@ -10,7 +10,7 @@ as if no memory existed.
 from __future__ import annotations
 
 from src.agents.state import AgentState
-from src.memory.long_term import get_user_facts, save_user_facts
+from src.memory.long_term import get_user_facts, save_user_facts, extract_memory
 from src.utils.logger import logger
 
 
@@ -51,11 +51,11 @@ async def update_memory_node(state: AgentState) -> dict:
         logger.info("[MemoryNode] Skipping memory update — no Q/A pair.")
         return {}
 
-    messages = [
-        {"role": "user", "content": question},
-        {"role": "assistant", "content": final_answer},
-    ]
-
     logger.info(f"[MemoryNode] Saving conversation turn for user '{user_id}'...")
-    await save_user_facts(messages=messages, user_id=user_id)
+    memory = await extract_memory(question, final_answer)
+    if memory:
+        await save_user_facts(
+            messages=[{"role": "user", "content": memory}],
+            user_id=user_id
+        )
     return {}

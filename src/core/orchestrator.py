@@ -8,7 +8,7 @@ from src.processors.pdf_engine import PDFEngine
 from src.processors.chunker import Chunker
 from src.llm.embeddings import EmbeddingFactory
 from src.retrieval.vector_db import VectorDBManager
-from src.llm.factory import LLLMFactory
+from src.llm.factory import LLMFactory
 from src.prompt.template import CONTEXT_COMPRESSION_PROMPT
 
 
@@ -22,7 +22,7 @@ class IngestionOrchestrator:
         self.embedding_factory = EmbeddingFactory()
         
         # Ensure LlamaIndex is configured for this provider
-        LLLMFactory.configure_llama_index_settings(provider=self.provider)
+        LLMFactory.configure_llama_index_settings(provider=self.provider)
 
     async def generate_summary(self, nodes: List, provider: str) -> str:
         """Generate a short summary from the first document nodes."""
@@ -32,7 +32,7 @@ class IngestionOrchestrator:
         # Take first 10 nodes for overview summary
         sample_text = "\n\n".join([n.get_content() for n in nodes[:10]])
 
-        client = LLLMFactory.create_client("summary", provider=provider)
+        client = LLMFactory.create_client("summary", provider=provider)
         prompt = CONTEXT_COMPRESSION_PROMPT.format(input_data=sample_text)
 
         try:

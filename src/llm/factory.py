@@ -10,7 +10,7 @@ from src.utils.logger import logger
 from llama_index.core import Settings
 
 
-class LLLMFactory:
+class LLMFactory:
     """Factory for creating pre-configured LLM clients by purpose.
 
     Selects the provider (Gemini or Ollama) from ``settings.llm.provider``
@@ -134,4 +134,9 @@ class LLLMFactory:
             )
         
         logger.info(f"LlamaIndex global Settings updated successfully for {provider}")
+
+
+def get_llm_provider(purpose: str = "rag", provider: str = None):
+    """Convenience helper to get a pre-configured LLM client instance."""
+    return LLMFactory.create_client(purpose=purpose, provider=provider).get_llm()
 

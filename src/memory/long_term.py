@@ -16,6 +16,8 @@ from typing import List, Dict
 
 from src.core.config import settings
 from src.utils.logger import logger
+from src.llm.factory import get_llm_provider
+from src.prompt.template import PROMPT_EXTRACT_MEMORY
 
 # Lazy import to avoid import-time crash when mem0ai is not installed
 _mem0_instance = None
@@ -72,6 +74,22 @@ def _get_memory():
         logger.info("Mem0 Memory initialized successfully.")
     return _mem0_instance
 
+async def extract_memory(question: str, answer: str) -> str:
+    """Use the LLM to extract only the most important facts from a Q&A pair.
+
+    Returns a concise summary string, or "" if extraction fails.
+    """
+    try:
+        llm = get_llm_provider()
+        prompt = PROMPT_EXTRACT_MEMORY.format(question=question, answer=answer)
+        response = await llm.ainvoke(prompt)
+        memory = response.content.strip()
+        if not memory or len(memory) < 10:
+            return ""
+        return memory
+    except Exception as exc:
+        logger.warning(f"[Memory] Failed to extract memory: {exc}")
+        return ""
 
 async def get_user_facts(query: str, user_id: str) -> str:
     """Search Mem0 for facts about *user_id* relevant to *query*.
