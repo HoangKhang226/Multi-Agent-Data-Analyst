@@ -8,7 +8,8 @@ import os
 import gc
 from llama_index.core import StorageContext, VectorStoreIndex, load_index_from_storage
 from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.core.retrievers import AutoMergingRetriever
+from llama_index.core.retrievers import AutoMergingRetriever, QueryFusionRetriever
+from llama_index.retrievers.bm25 import BM25Retriever
 
 class VectorDBManager:
     def __init__(self, embedding_model, provider: str = "ollama"):
@@ -174,6 +175,64 @@ class VectorDBManager:
         )
 
         return retriever
+
+    def get_hybrid_retriever(
+        self,
+        similarity_top_k: int = 3,
+        collection_name: str = "default_collection",
+        num_queries: int = 1,
+        **kwargs,
+    ):
+        """
+        Trả về Hybrid Retriever kết hợp:
+          - Vector Search (semantic): tìm theo ngữ nghĩa
+          - BM25 (keyword):          tìm theo từ khoá chính xác
+        Hai retriever được hợp nhất bằng QueryFusionRetriever
+        với thuật toán Reciprocal Rank Fusion (RRF).
+
+        Tham số:
+            similarity_top_k: Số kết quả trả về sau khi fusion
+            collection_name:   Tên collection trong ChromaDB
+            num_queries:       Số câu query phụ được sinh ra (1 = chỉ dùng câu gốc,
+                               tăng lên để tự động sinh thêm câu query đa dạng hơn)
+        """
+        index = self.get_index(collection_name)
+
+        if index is None:
+            logger.error("❌ Không thể tạo hybrid retriever vì index trống.")
+            return None
+
+        # --- 1. Lấy tất cả nodes từ docstore để build BM25 index ---
+        all_nodes = list(index.storage_context.docstore.docs.values())
+
+        if not all_nodes:
+            logger.warning("⚠️ Docstore trống, BM25 không có dữ liệu để index.")
+            return self.get_retriever(similarity_top_k=similarity_top_k,
+                                     collection_name=collection_name, **kwargs)
+
+        # --- 2. Vector retriever (semantic search) ---
+        vector_retriever = index.as_retriever(
+            similarity_top_k=similarity_top_k, **kwargs
+        )
+
+        # --- 3. BM25 retriever (keyword search) ---
+        bm25_retriever = BM25Retriever.from_defaults(
+            nodes=all_nodes,
+            similarity_top_k=similarity_top_k,
+        )
+
+        # --- 4. Kết hợp cả hai bằng QueryFusionRetriever (RRF) ---
+        logger.info("🔀 Đang khởi tạo Hybrid Retriever (BM25 + Vector Search)...")
+        hybrid_retriever = QueryFusionRetriever(
+            retrievers=[vector_retriever, bm25_retriever],
+            similarity_top_k=similarity_top_k,
+            num_queries=num_queries,       # 1 = không sinh query phụ, chỉ dùng câu gốc
+            mode="reciprocal_rerank",       # Thuật toán RRF – phổ biến nhất cho hybrid search
+            use_async=False,
+            verbose=True,
+        )
+
+        return hybrid_retriever
 
     def save_summary(self, collection_name: str, summary: str):
         """Append or update a document summary in the metadata storage."""

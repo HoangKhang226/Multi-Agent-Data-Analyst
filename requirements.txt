@@ -26,6 +26,7 @@ llama-index-embeddings-google-genai
 llama-index-llms-google-genai
 llama-index-embeddings-ollama
 llama-index-llms-ollama
+llama-index-retrievers-bm25   # Hybrid BM25 + Vector Search
 
 fastapi
 uvicorn
