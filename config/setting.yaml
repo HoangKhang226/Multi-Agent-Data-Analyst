@@ -1,0 +1,48 @@
+app:
+  project_name: "Chat With Data"
+  version: "1.0.0"
+  debug: true
+
+llm:
+  provider: "ollama" # "gemini" | "ollama"
+  rag_reranker_model: "BAAI/bge-reranker-v2-m3"
+  temperature: 0.7
+
+gemini:
+  summary_model: "gemini-2.5-flash"
+  rag_model: "gemini-2.5-flash"
+
+ollama:
+  base_url: "http://localhost:11434"
+  summary_model: "qwen3:8b"
+  rag_model: "qwen3:8b"
+  embed_model: "nomic-embed-text"
+
+embedding:
+  google: "gemini-embedding-001"
+  ollama: "nomic-embed-text"
+
+retrieval:
+  threshold: 0.7
+  top_k: 5
+
+chunking:
+  parent_chunk_size: 2000
+  parent_chunk_overlap: 200
+  child_chunk_size: 200
+  child_chunk_overlap: 50
+
+storage:
+  data_dir: "data"
+  data_csv_or_excel: "data/raw"
+  data_pdf_or_word: "data/raw"
+  vector_db: "storage/vector_db"
+  collection_name: "chat_with_data"
+
+memory:
+  chroma_path: "storage/mem0_chroma"
+  history_db_path: "storage/mem0_history.db"
+
+langsmith:
+  project: "chat_with_data"
+  endpoint: "https://api.smith.langchain.com"

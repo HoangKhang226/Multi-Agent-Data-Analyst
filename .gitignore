@@ -1,0 +1,30 @@
+# Python-specific
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Storage and Data
+storage/
+output/
+exports/
+temp/
+*.csv
+*.xlsx
+*.pdf
+*.docx
+*.db
+
+# Logs and tracing
+logs/
+*.log
+.langsmith/
+
+# IDEs
+.vscode/
+.idea/
+
+# UI
+.streamlit/
+static/charts/

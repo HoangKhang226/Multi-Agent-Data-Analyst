@@ -1,0 +1,28 @@
+version: 1
+disable_existing_loggers: false
+formatters:
+  simple:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    level: INFO
+    stream: ext://sys.stdout
+  file:
+    class: logging.FileHandler
+    formatter: simple
+    level: INFO
+    filename: logs/app.log
+    encoding: utf-8
+loggers:
+  chat_with_data:
+    handlers: [console, file]
+    level: INFO
+    propagate: false
+
+root:
+  handlers: [console, file]
+  level: INFO

@@ -1,0 +1,38 @@
+pydantic
+pydantic-settings
+
+langsmith
+langchain
+langchain-google-genai
+langchain-community
+langchain-ollama
+langgraph
+google-generativeai
+langchain-tavily
+langchain-experimental
+
+tavily-python
+
+docling
+pypdf
+
+langchain-chroma
+chromadb
+
+# LlamaIndex
+llama-index
+llama-index-vector-stores-chroma
+llama-index-embeddings-google-genai
+llama-index-llms-google-genai
+llama-index-embeddings-ollama
+llama-index-llms-ollama
+
+fastapi
+uvicorn
+python-multipart
+
+# Memory
+mem0ai
+
+# Utility
+pyarrow
