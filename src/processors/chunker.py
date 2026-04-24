@@ -15,6 +15,12 @@ class Chunker:
         self.node_parser = HierarchicalNodeParser.from_defaults(
             chunk_sizes=[2048, 512, 128]
         )
+        # tree chunk:
+        # Parent (2048 tokens)
+        # ├── Mid (512 tokens)
+        # │    ├── Leaf (128 tokens)
+        # │    ├── Leaf (128 tokens)
+        # ├── Mid (512 tokens)
         logger.debug("LlamaIndex HierarchicalNodeParser initialized")
 
     def chunk(self, docs: list[LlamaDocument]):
@@ -28,14 +34,18 @@ class Chunker:
               - nodes: All nodes in the hierarchy (for storage and relationship context).
               - leaf_nodes: Only the smallest chunks (for semantic search).
         """
-        if not isinstance(docs, list):
+        if not isinstance(docs, list): # nếu không phải list thì chuyển thành list
             docs = [docs]
 
         logger.info(f"Chunking {len(docs)} documents into a hierarchical structure...")
         
         # Automatically generate Parent - Child graph nodes
         nodes = self.node_parser.get_nodes_from_documents(docs)
-        
+        # cắt text thành nhiều chunk
+        # tạo relationship:
+        # parent → child
+        # child → parent
+
         # We store leaf nodes for search, but keep all nodes to preserve the hierarchy
         leaf_nodes = get_leaf_nodes(nodes)
         

@@ -9,15 +9,15 @@ from langchain_core.messages import BaseMessage
 
 def write_once(old, new):
     """Keep the first value assigned to the field."""
-    if old is not None: # nếu old đã có giá trị thì giữ nguyên
+    if old is not None: # If old value exists, keep it
         return old
     return new
 
 def safe_add_list(old, new):
     """Parallel-safe list concatenation."""
-    if new is None: # nếu new là None thì giữ nguyên old
+    if new is None: # If new is None, return old list or empty
         return old or []
-    if not isinstance(new, list): # nếu new không phải là list thì chuyển sang list
+    if not isinstance(new, list): # If new is not a list, wrap it
         new = [new]
     return (old or []) + new
 
@@ -26,7 +26,7 @@ def safe_add_list(old, new):
 # ==============================
 
 class SubTask(TypedDict):
-    task_type: Literal["data_analyzer", "visualizer", "rag", "web_search"]
+    task_type: Literal["data_analyzer", "visualizer", "rag", "web_search", "llm_knowledge"]
     description: str
     status: Literal["pending", "completed", "failed"]
     result: Optional[str]
@@ -52,6 +52,12 @@ class AgentState(TypedDict):
     llm_provider: Annotated[Optional[str], write_once]
     memory_provider: Annotated[Optional[str], write_once]
     collection_name: Annotated[Optional[str], write_once]
+    
+    # NEW: Data mode (document | tabular | None)
+    data_mode: Annotated[Optional[Literal["document", "tabular"]], write_once]
+    
+    # NEW: Retrieval strategy for documents
+    retrieval_mode: Annotated[Optional[Literal["hierarchical", "hybrid"]], write_once]
 
     # ------------------------------------------------------------------
     # 2. Input & Context (READ ONLY after init)
@@ -125,6 +131,8 @@ def create_initial_state() -> AgentState:
         "llm_provider": None,
         "memory_provider": None,
         "collection_name": None,
+        "data_mode": None,
+        "retrieval_mode": "hierarchical",
 
         "question": None,
         "input_data": None,

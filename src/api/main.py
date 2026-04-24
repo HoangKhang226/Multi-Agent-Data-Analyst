@@ -14,7 +14,7 @@ DELETE /reset    — Clear vector DB for a given provider
 import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -45,10 +45,10 @@ app = FastAPI(
 # Serve charts for UI
 charts_dir = Path("output_charts")
 charts_dir.mkdir(exist_ok=True)
-app.mount("/charts", StaticFiles(directory="output_charts"), name="charts") # biến folder output_charts thành public URL /charts
+app.mount("/charts", StaticFiles(directory="output_charts"), name="charts") # Map output_charts folder to public URL /charts
 
 
-@app.on_event("startup") # chạy khi app khởi động để tránh gọi llm nhiều lần
+@app.on_event("startup") # Run on startup to avoid multiple LLM re-configs
 async def on_startup():
     """Configure LlamaIndex global settings once on startup."""
     try:
@@ -73,8 +73,12 @@ class ChatRequest(BaseModel):
     content_summary: Optional[str] = ""
     dataframe_head: Optional[str] = ""
     dataframe_info: Optional[str] = ""
+    
+    # NEW: Control routing
+    data_mode: Optional[Literal["document", "tabular"]] = None
+    retrieval_mode: Optional[Literal["hierarchical", "hybrid"]] = "hierarchical"
 
-
+  
 class ChatResponse(BaseModel):
     question: str
     answer: Optional[str]
@@ -93,6 +97,7 @@ class IngestResponse(BaseModel):
     summary: str
     info: Optional[str] = ""
     provider: str
+    data_mode: Optional[Literal["document", "tabular"]] = None
 
 
 class ResetResponse(BaseModel):
@@ -133,13 +138,13 @@ async def ingest_document(
     ),
 ):
     """Upload a document (PDF, DOCX, CSV, Excel), extract/process, and index."""
-    allowed_docs = {".pdf", ".docx"} # các định dạng file được phép
-    allowed_tables = {".csv", ".xlsx", ".xls"} # các định dạng file được phép\
+    allowed_docs = {".pdf", ".docx"} # Supported document formats
+    allowed_tables = {".csv", ".xlsx", ".xls"} # Supported tabular formats
     result=[]
     for file in files:
-        suffix = Path(file.filename).suffix.lower() # suffix là đuôi file và chuyển sang chữ thường
+        suffix = Path(file.filename).suffix.lower() # Normalize file extension
         
-        if suffix not in allowed_docs and suffix not in allowed_tables: # nếu đuôi file không thuộc allowed_docs và allowed_tables
+        if suffix not in allowed_docs and suffix not in allowed_tables: # Check if format is supported
             raise HTTPException(
                 status_code=400,
             detail=f"Unsupported file type '{suffix}'. Accepted: {', '.join(allowed_docs | allowed_tables)}",
@@ -148,14 +153,15 @@ async def ingest_document(
         logger.info(f"[/ingest] Ingesting file: {file.filename}")
 
         # Save to a temp file
-        with NamedTemporaryFile(delete=False, suffix=suffix) as tmp: # tạo file tạm để lưu file upload
-            shutil.copyfileobj(file.file, tmp) # copy file upload vào file tạm
-            tmp_path = Path(tmp.name) # lấy đường dẫn file tạm
+        with NamedTemporaryFile(delete=False, suffix=suffix) as tmp: # Create temp file for upload
+            shutil.copyfileobj(file.file, tmp) # Save uploaded content
+            tmp_path = Path(tmp.name) # Get path to temp file
             
         try:
-            if suffix in allowed_docs: # nếu đuôi file thuộc allowed_docs
+            if suffix in allowed_docs: # Process as PDF/Docx
                 orchestrator = IngestionOrchestrator(provider=embedding_provider)
                 res = await orchestrator.ingest_pdf(tmp_path, embedding_provider=embedding_provider)
+                res["data_mode"] = "document" # Explicitly set for UI/Routing
                 result.append(IngestResponse(**res))
             else:
                 # Tabular data handling
@@ -166,7 +172,7 @@ async def ingest_document(
                 # Persist DF for pandas_runner (MVP: single active file)
                 storage_dir = Path("storage")
                 storage_dir.mkdir(exist_ok=True)
-                active_df_path = storage_dir / f"{file.filename}.parquet"
+                active_df_path = storage_dir / "active_df.parquet"
                 
                 df.to_parquet(active_df_path)
                 logger.info(f"[/ingest] Persisted tabular data to {active_df_path}")
@@ -180,6 +186,7 @@ async def ingest_document(
                     summary=res["dataframe_head"],
                     info=res.get("dataframe_info", ""),
                     provider="data_analyzer",
+                    data_mode="tabular",
                 ))
         except Exception as e:
             logger.error(f"[/ingest] Error: {e}")
@@ -234,6 +241,8 @@ async def chat(request: ChatRequest):
         memory_provider=memory_provider,
         collection_name=settings.storage.collection_name,
         user_id=user_id,
+        data_mode=request.data_mode,
+        retrieval_mode=request.retrieval_mode,
     )
     state.update(
         {

@@ -37,3 +37,7 @@ mem0ai
 
 # Utility
 pyarrow
+matplotlib
+seaborn
+scipy
+statsmodels

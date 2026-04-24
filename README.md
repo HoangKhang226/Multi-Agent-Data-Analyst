@@ -1,132 +1,110 @@
-# Chat With Data - Hierarchical RAG Pipeline
+# 📊 Multi-Agent Data Analyst
 
-**Chat With Data** là một hệ thống chatbot phân tích dữ liệu tiên tiến được xây dựng trên kiến trúc **Hierarchical RAG** (RAG phân tầng). Hệ thống cho phép người dùng tải lên nhiều loại tài liệu (PDF, DOCX) và dữ liệu bảng (CSV, Excel), sau đó tương tác thông qua ngôn ngữ tự nhiên để trích xuất thông tin, thực hiện thống kê và vẽ biểu đồ tự động.
+An advanced agentic pipeline designed to analyze various data sources (Tabular & Textual) using a coordinated multi-agent system powered by **LangGraph**, **LlamaIndex**, and **Mem0**.
 
----
+## 🚀 Overview
 
-## 🌟 Tính năng nổi bật
+This system allows users to upload datasets (CSV/Excel) and documents (PDF/Docx), then perform complex conversational analysis. It features an intelligent router that dynamically dispatches tasks to specialized agents:
 
-- **Xử lý Đa nhiệm (Multi-agentic Task Planning)**: Tự động phân tách các câu hỏi phức tạp thành các nhiệm vụ nhỏ và giải quyết song song.
-- **Tích hợp Đa nguồn (Multi-source RAG)**:
-  - **Document RAG**: Truy xuất dữ liệu từ kho tài liệu nội bộ.
-  - **Web Search**: Tìm kiếm thông tin thời gian thực qua Tavily API.
-  - **Data Analysis**: Phân tích số liệu bảng bằng Pandas và Numpy.
-  - **Visualization**: Tự động tạo biểu đồ thống kê chuyên nghiệp.
-- **Bộ nhớ dài hạn (Long-term Memory)**: Sử dụng **Mem0** với backend **Ollama** để ghi nhớ ngữ cảnh và sở thích người dùng qua từng phiên làm việc.
-- **Chế độ Fail-safe**: Luôn đảm bảo phản hồi ngay cả khi một trong các nguồn dữ liệu gặp lỗi.
+- **Pandas Agent**: For statistical analysis and data visualization.
+- **RAG Agent**: For precise information retrieval from documents.
+- **Long-term Memory**: Powered by Mem0 to remember user preferences and facts across sessions.
 
----
+## ✨ Key Features
 
-## 📐 Kiến trúc LangGraph
+- **Multi-Source Data Ingestion**: Seamlessly process structured tables and unstructured documents.
+- **Advanced RAG Pipeline**: Uses **Hierarchical Auto-Merging Retrieval** for superior context extraction.
+- **Dynamic Routing**: Automatically decides whether to use a tabular engine, RAG, or general AI knowledge.
+- **Isolated Storage**: Collection-level isolation to prevent data corruption between different datasets.
+- **Interactive Visualization**: Generates charts and plots based on data queries.
+- **User Personalization**: Learns from previous interactions to provide more relevant insights.
 
-Sơ đồ luồng hoạt động thực tế của hệ thống:
+## 🏗 Architecture
 
 ```mermaid
 graph TD
-    START((START)) --> RM[retrieve_memory]
-    RM --> CC[context_compressor]
-    CC --> AC{ambiguity_checker}
+    User([User]) --> UI[Streamlit UI]
+    UI --> API[FastAPI Backend]
+    API --> Orchestrator[Pipeline Orchestrator]
 
-    AC -- Ambiguous --> RH[rejection_handler]
-    RH --> UM[update_memory]
+    subgraph Agents [Agentic Pipeline]
+        Router{Knowledge Router}
+        Router --> |Tabular| Pandas[Pandas Runner]
+        Router --> |Text| RAG[RAG Node]
+        Router --> |General| LLM[General LLM]
 
-    AC -- Clear --> PL[planner]
+        Pandas --> Synthesizer
+        RAG --> Synthesizer
+        LLM --> Synthesizer
 
-    PL -- Fan-out --> SR[subtask_runner]
-
-    subgraph SP [Subtask Pipeline]
-        KR{knowledge_router}
-        HYDE[hyde]
-        RR[rag_retriever]
-        WS[web_searcher]
-        DA[data_analyzer]
-        CG[chart_generator]
-        LLM[llm_node]
-        SE((SUB_END))
-
-        KR -- rag --> HYDE --> RR --> SE
-        KR -- web --> WS --> SE
-        KR -- data_analyzer --> DA --> SE
-        KR -- visualizer --> CG --> SE
-        KR -- llm_knowledge --> LLM --> SE
+        Synthesizer[Response Synthesizer]
     end
 
-    SR --> KR
-    SE -- Fan-in --> ST[synthesizer]
-    ST --> UM
-    UM --> END((END))
-
-    style SP fill:#fcfcfc,stroke:#333,stroke-dasharray: 5 5
+    Orchestrator --> Agents
+    Agents --> Memory[(Mem0 Long-term Memory)]
+    Agents --> VectorDB[(Isolated Vector Store)]
 ```
 
----
+## 🛠 Tech Stack
 
-## 🛠️ Công nghệ cốt lõi
+- **Framework**: [LangGraph](https://github.com/langchain-ai/langgraph)
+- **RAG Engine**: [LlamaIndex](https://www.llamainindex.ai/)
+- **Large Language Models**: Google Gemini 2.5 Flash / Ollama
+- **Memory**: [Mem0](https://mem0.ai/)
+- **Vector Database**: ChromaDB
+- **Backend**: FastAPI
+- **Frontend**: Streamlit
 
-- **Ngôn ngữ**: Python 3.11+
-- **Framework**: LangGraph, LangChain
-- **AI Models**:
-  - **Ollama**: Qwen2.5/3 (Local LLM), Nomic-embed-text (Embedding).
-  - **Gemini**: Google Gemini 2.5 Flash (Cloud LLM).
-- **Cơ sở dữ liệu**:
-  - **ChromaDB**: Vector Database cho RAG.
-  - **Mem0**: Quản lý bộ nhớ người dùng.
-- **Giao diện & API**:
-  - **FastAPI**: Backend service.
-  - **Streamlit**: Frontend tương tác.
+## 🚦 Getting Started
 
----
+### Prerequisites
 
-## � Cấu trúc dự án
+- Python 3.10+
+- Virtual environment (recommended)
+- API Keys for Google Gemini (optional if using Ollama)
 
-```text
-Chat With Data/
-├── src/
-│   ├── agents/         # Logic LangGraph (Nodes, Graph, State)
-│   ├── api/            # REST API (FastAPI)
-│   ├── core/           # Cấu hình hệ thống & Ingestion
-│   ├── llm/            # Factory khởi tạo LLM/Embeddings
-│   ├── memory/         # Bộ nhớ Mem0 (long_term.py)
-│   ├── retrieval/      # Xử lý Vector DB & RAG
-│   └── ui/             # Giao diện người dùng (Streamlit)
-├── storage/            # Lưu trữ local (VectorDB, Parquet, SQLite)
-└── output_charts/      # Thư mục chứa hình ảnh biểu đồ đã vẽ
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <repo-url>
+   cd Multi-Agent-Data-Analyst
+   ```
+2. Create and activate virtual environment:
+   ```bash
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### Running the Application
+
+1. Start the Backend API:
+   ```bash
+   python -m src.api.main
+   ```
+2. Start the Streamlit UI:
+   ```bash
+   streamlit run src/ui/app.py
+   ```
+
+## 🧪 Testing
+
+We provide a comprehensive end-to-end test script:
+
+```bash
+python run_final_test.py
 ```
 
----
+This script verifies:
 
-## ⚙️ Hướng dẫn cài đặt
+- Data Ingestion for both CSV and PDF.
+- Correct routing to specialized agents.
+- Successful context retrieval and chart generation.
 
-1.  **Clone mã nguồn**:
+## 📄 License
 
-    ```bash
-    git clone <repository_url>
-    cd "Chat With Data"
-    ```
-
-2.  **Khởi tạo môi trường**:
-
-    ```bash
-    python -m venv venv
-    ./venv/Scripts/activate
-    pip install -r requirements.txt
-    ```
-
-3.  **Cấu hình biến môi trường**: Tạo file `.env` tại thư mục gốc:
-
-    ```env
-    GOOGLE_API_KEY=your_key_here
-    TAVILY_API_KEY=your_key_here
-    LANGSMITH_API_KEY=your_key_here
-    ```
-
-4.  **Khởi chạy hệ thống**:
-    - **Backend**: `python -m src.api.main`
-    - **Frontend**: `streamlit run src/ui/app.py`
-
----
-
-## 📝 Giấy phép
-
-Dự án được phát triển dưới giấy phép nội bộ. Mọi quyền được bảo lưu.
-#
+This project is licensed under the MIT License.

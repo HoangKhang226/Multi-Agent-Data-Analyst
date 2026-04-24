@@ -100,6 +100,11 @@ Nguyên tắc:
 - Mỗi sub-task là chuỗi văn bản mô tả rõ ràng
 - Viết bằng ngôn ngữ câu hỏi gốc
 
+## Chế độ dữ liệu hiện tại: {data_mode}
+- Nếu "document": chỉ tạo các loại task như "rag", "web_search", "llm_knowledge".
+- Nếu "tabular": chỉ tạo các loại task như "data_analyzer", "visualizer", "llm_knowledge".
+- Nếu None: chỉ tạo duy nhất task loại "llm_knowledge".
+
 ## TRƯỜNG HỢP ĐẶC BIỆT (THÊM MỚI)
 Nếu các cột đó tồn tại nhưng ở dạng khác về tên thì tự suy luận tên cột dựa vào df.info()
 {dataframe_info} và sẽ đặt câu hỏi dựa vào tên cột gốc của dataset
@@ -158,19 +163,51 @@ cho yêu cầu bên dưới. Đoạn này sẽ dùng để tìm kiếm ngữ ngh
 """
 
 
-# ---------------------------------------------------------------------------
-# Node 5c — LLM Knowledge
-# ---------------------------------------------------------------------------
-
-LLM_KNOWLEDGE_PROMPT = """\
+# data_mode = "document" (Có tài liệu nhưng muốn hỏi kiến thức LLM bổ trợ hoặc tóm tắt)
+LLM_KNOWLEDGE_DOC_PROMPT = """\
 ## Thông tin người dùng
 {user_memory_section}
 
+Bạn đang hỗ trợ người dùng truy vấn tài liệu văn bản.
+Tóm tắt tài liệu: {content_summary}
+
 ## Nhiệm vụ
-Trả lời câu hỏi / yêu cầu bên dưới dựa trên kiến thức của bạn VÀ thông tin người dùng được cung cấp ở trên.
-Trả lời ngắn gọn, chính xác, dùng Markdown nếu hữu ích.
+Dựa vào tóm tắt tài liệu trên VÀ kiến thức của bạn, hãy trả lời yêu cầu bên dưới.
+Trả lời ngắn gọn, chính xác.
 
 ## Yêu cầu cụ thể
+{current_task}
+"""
+
+# data_mode = "tabular" (Có bảng dữ liệu)
+LLM_KNOWLEDGE_TAB_PROMPT = """\
+## Thông tin người dùng
+{user_memory_section}
+
+Bạn đang hỗ trợ người dùng phân tích dữ liệu bảng.
+Thông tin bảng:
+{dataframe_head}
+
+## Nhiệm vụ
+Dựa vào cấu trúc bảng trên VÀ kiến thức của bạn, hãy trả lời yêu cầu bên dưới.
+Trả lời ngắn gọn, chính xác.
+
+## Yêu cầu cụ thể
+{current_task}
+"""
+
+# data_mode = None (Chat thuần)
+LLM_KNOWLEDGE_BASE_PROMPT = """\
+## Thông tin người dùng
+{user_memory_section}
+
+Bạn là trợ lý thông minh.
+
+## Nhiệm vụ
+Hãy trả lời câu hỏi bên dưới bằng kiến thức của bạn.
+Trả lời thân thiện, hữu ích.
+
+## Câu hỏi
 {current_task}
 """
 

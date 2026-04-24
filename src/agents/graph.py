@@ -36,6 +36,7 @@ from src.agents.node import (
     knowledge_router,
     hyde,
     synthesizer,
+    llm_node,
 )
 from src.agents.memory_nodes import retrieve_memory_node, update_memory_node
 from src.agents.tool import (
@@ -44,7 +45,6 @@ from src.agents.tool import (
     fan_out_subtasks,
     rag_retriever,
     web_searcher,
-    llm_node,
     data_analyzer,
     chart_generator,
 )
@@ -159,6 +159,8 @@ def make_initial_state(
     memory_provider: str = None,
     collection_name: str = None,
     user_id: str = None,
+    data_mode: str = None,
+    retrieval_mode: str = "hierarchical",
 ) -> AgentState:
     """Return a fresh AgentState with overridden defaults."""
     state = create_initial_state()
@@ -171,6 +173,10 @@ def make_initial_state(
         state["collection_name"] = collection_name
     if user_id:
         state["user_id"] = user_id
+    if data_mode:
+        state["data_mode"] = data_mode
+    if retrieval_mode:
+        state["retrieval_mode"] = retrieval_mode
         
     return state
 

@@ -16,12 +16,11 @@ class VectorDBManager:
         self.embedding_model = embedding_model
         self.provider = provider.lower()
 
-        # Set up storage paths
-        base_dir = Path(__file__).resolve().parents[2] / "storage"
-        self.persist_directory = base_dir / self.provider
-        self.persist_directory.mkdir(parents=True, exist_ok=True)
+        # Set up base storage path
+        self.base_storage_dir = Path(__file__).resolve().parents[2] / "storage"
+        self.provider_dir = self.base_storage_dir / self.provider
+        self.provider_dir.mkdir(parents=True, exist_ok=True)
         
-        self.summary_path = self.persist_directory / "collection_metadata.json"
         self._db_client = None
         self._index = None
 
@@ -29,31 +28,43 @@ class VectorDBManager:
     def db_client(self):
         """Initialize and return the ChromaDB client on demand."""
         if self._db_client is None:
-            self._db_client = chromadb.PersistentClient(path=str(self.persist_directory)) # initial persistent memory
+            # ChromaDB stays at provider level (shares same sqlite normally)
+            self._db_client = chromadb.PersistentClient(path=str(self.provider_dir))
         return self._db_client
 
-    def _get_storage_context(self, collection_name: str):
-        """Get the LlamaIndex StorageContext for a specific collection."""
+    def get_persist_dir(self, collection_name: str) -> Path:
+        """Get collection-specific persist directory for LlamaIndex metadata."""
+        pdir = self.provider_dir / collection_name
+        pdir.mkdir(parents=True, exist_ok=True)
+        return pdir
+
+    @property
+    def summary_path(self) -> Path:
+        """Global metadata for summaries in this provider folder."""
+        return self.provider_dir / "collection_metadata.json"
+
+    def _get_storage_context(self, collection_name: str, persist_dir: Path = None):
+        """Get the LlamaIndex StorageContext for a specific collection and path."""
         from llama_index.core.storage.docstore import SimpleDocumentStore
         from llama_index.core.storage.index_store import SimpleIndexStore
         
         chroma_collection = self.db_client.get_or_create_collection(collection_name)
         vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-
-        # Check if we have existing storage files
-        docstore_path = self.persist_directory / "docstore.json"
+        
+        if persist_dir is None:
+            persist_dir = self.get_persist_dir(collection_name)
+            
+        docstore_path = persist_dir / "docstore.json"
         
         if docstore_path.exists():
             try:
-                storage_context = StorageContext.from_defaults(
+                return StorageContext.from_defaults(
                     vector_store=vector_store,
-                    persist_dir=str(self.persist_directory),
+                    persist_dir=str(persist_dir),
                 )
-                return storage_context
             except Exception as e:
-                logger.warning(f"⚠️ Failed to load storage context from {self.persist_directory}: {e}")
+                logger.warning(f"⚠️ Failed to load storage context from {persist_dir}: {e}")
         
-        # Initialize new storage context with explicit stores
         return StorageContext.from_defaults(
             vector_store=vector_store,
             docstore=SimpleDocumentStore(),
@@ -69,13 +80,13 @@ class VectorDBManager:
             
             gc.collect() # Force garbage collection to release file locks
 
-            if self.persist_directory.exists():
-                shutil.rmtree(self.persist_directory,
-                ignore_errors=True # nếu file không xóa được sẽ bỏ qua
+            if self.provider_dir.exists():
+                shutil.rmtree(self.provider_dir,
+                ignore_errors=True # ignore errors if file is locked
                 )
-                logger.info(f"🧹 Cleaned up storage directory: {self.persist_directory}")
+                logger.info(f"🧹 Cleaned up storage directory: {self.provider_dir}")
             
-            self.persist_directory.mkdir(parents=True, exist_ok=True)
+            self.provider_dir.mkdir(parents=True, exist_ok=True)
             return True
         except Exception as e:
             logger.error(f"❌ Failed to reset DB: {e}")
@@ -86,17 +97,54 @@ class VectorDBManager:
         if self._index is not None:
             return self._index
 
-        if not (self.persist_directory / "docstore.json").exists():
-            return None
-
         try:
-            storage_context = self._get_storage_context(collection_name)
-            self._index = load_index_from_storage(
-                storage_context,
-                embed_model=self.embedding_model,
-            )
+            # Multi-path search for metadata
+            primary_dir = self.get_persist_dir(collection_name)
+            legacy_dir = self.provider_dir
+            
+            # Decide which directory to use for LlamaIndex files
+            target_dir = None
+            if (primary_dir / "docstore.json").exists():
+                target_dir = primary_dir
+            elif (legacy_dir / "docstore.json").exists():
+                target_dir = legacy_dir
+                logger.info(f"ℹ️ Falling back to legacy root metadata for '{collection_name}'")
+
+            if target_dir:
+                storage_context = self._get_storage_context(collection_name, persist_dir=target_dir)
+                index = load_index_from_storage(
+                    storage_context,
+                    embed_model=self.embedding_model,
+                )
+            else:
+                # If no docstore exists anywhere, index cannot be loaded
+                return None
+            
+            # --- Fallback Logic for Content ---
+            # If the loaded index is empty (0 nodes in Chroma for this collection name),
+            # try to find a legacy collection name (e.g. chat_with_data_gemini instead of chat_with_data)
+            provider_suffix = f"_{self.provider}"
+            if not collection_name.endswith(provider_suffix):
+                # We need to check the actual node count in the vector store
+                chroma_collection = self.db_client.get_collection(collection_name)
+                if chroma_collection.count() == 0:
+                    legacy_name = f"{collection_name}{provider_suffix}"
+                    try:
+                        legacy_chroma = self.db_client.get_collection(legacy_name)
+                        if legacy_chroma.count() > 0:
+                            logger.info(f"⚠️ Primary collection '{collection_name}' is empty. Falling back to legacy name '{legacy_name}'")
+                            # We reload the index using the legacy collection name but same metadata dir
+                            storage_context = self._get_storage_context(legacy_name, persist_dir=target_dir)
+                            index = load_index_from_storage(
+                                storage_context,
+                                embed_model=self.embedding_model,
+                            )
+                    except Exception: pass
+
+            self._index = index
             return self._index
-        except Exception:
+        except Exception as e:
+            logger.warning(f"⚠️ Error loading index for {collection_name}: {e}")
             return None
 
     def add_documents(self, nodes, collection_name: str = "default_collection"):
@@ -119,29 +167,30 @@ class VectorDBManager:
                     embed_model=self.embedding_model,
                     show_progress=True,
                     store_nodes_override=True, # Critical for hierarchical RAG persistence
-                )
+                ) # Create new index from nodes
             else:
                 logger.info("➕ Existing index found, checking for new nodes...")
 
                 existing_ids = set(
                     self._index.storage_context.docstore.docs.keys()
-                )
-
+                ) # Get list of existing node IDs
+ 
                 final_new_nodes = [
                     n for n in unique_input_nodes if n.node_id not in existing_ids
-                ]
+                ] # Filter for truly new nodes
 
                 if final_new_nodes:
                     logger.info(f"Inserting {len(final_new_nodes)} new nodes into the DB.")
-                    self._index.insert_nodes(final_new_nodes)
+                    self._index.insert_nodes(final_new_nodes) # Add new nodes to index
                 else:
                     logger.info("ℹ️ All nodes already exist in the index.")
 
-            # 3. Persist changes
+            # Persist changes
+            persist_dir = self.get_persist_dir(collection_name)
             self._index.storage_context.persist(
-                persist_dir=str(self.persist_directory)
+                persist_dir=str(persist_dir)
             )
-            logger.info(f"✅ Successfully persisted state at {self.persist_directory}")
+            logger.info(f"✅ Successfully persisted state for '{collection_name}' at {persist_dir}")
 
             return [n.node_id for n in unique_input_nodes]
 
@@ -155,6 +204,7 @@ class VectorDBManager:
         collection_name: str = "default_collection",
         **kwargs,
     ):
+    # hierachical retriever
         """Return an AutoMergingRetriever that automatically merges retrieved child nodes into parents."""
         index = self.get_index(collection_name)
 
@@ -170,9 +220,9 @@ class VectorDBManager:
         logger.info("Initializing AutoMergingRetriever...")
         retriever = AutoMergingRetriever(
             vector_retriever,
-            index.storage_context,
+            index.storage_context, # storage context containing all LlamaIndex components
             verbose=True
-        )
+        ) # Retriever capable of merging small chunks into larger parent context
 
         return retriever
 
@@ -183,6 +233,7 @@ class VectorDBManager:
         num_queries: int = 1,
         **kwargs,
     ):
+    # hybrid retriever
         """
         Trả về Hybrid Retriever kết hợp:
           - Vector Search (semantic): tìm theo ngữ nghĩa
@@ -194,7 +245,7 @@ class VectorDBManager:
             similarity_top_k: Số kết quả trả về sau khi fusion
             collection_name:   Tên collection trong ChromaDB
             num_queries:       Số câu query phụ được sinh ra (1 = chỉ dùng câu gốc,
-                               tăng lên để tự động sinh thêm câu query đa dạng hơn)
+                                tăng lên để tự động sinh thêm câu query đa dạng hơn)
         """
         index = self.get_index(collection_name)
 
@@ -202,7 +253,7 @@ class VectorDBManager:
             logger.error("❌ Không thể tạo hybrid retriever vì index trống.")
             return None
 
-        # --- 1. Lấy tất cả nodes từ docstore để build BM25 index ---
+        # Lấy tất cả nodes từ docstore để build BM25 index
         all_nodes = list(index.storage_context.docstore.docs.values())
 
         if not all_nodes:
@@ -210,20 +261,21 @@ class VectorDBManager:
             return self.get_retriever(similarity_top_k=similarity_top_k,
                                      collection_name=collection_name, **kwargs)
 
-        # --- 2. Vector retriever (semantic search) ---
+        # Vector retriever (semantic search)
         vector_retriever = index.as_retriever(
             similarity_top_k=similarity_top_k, **kwargs
         )
 
-        # --- 3. BM25 retriever (keyword search) ---
+        # BM25 retriever (keyword search)
         bm25_retriever = BM25Retriever.from_defaults(
             nodes=all_nodes,
             similarity_top_k=similarity_top_k,
         )
 
-        # --- 4. Kết hợp cả hai bằng QueryFusionRetriever (RRF) ---
+        # Kết hợp cả hai bằng QueryFusionRetriever (RRF)
         logger.info("🔀 Đang khởi tạo Hybrid Retriever (BM25 + Vector Search)...")
-        hybrid_retriever = QueryFusionRetriever(
+        # Hybrid Search (BM25 + Vector Search)
+        hybrid_retriever = QueryFusionRetriever( 
             retrievers=[vector_retriever, bm25_retriever],
             similarity_top_k=similarity_top_k,
             num_queries=num_queries,       # 1 = không sinh query phụ, chỉ dùng câu gốc
@@ -237,14 +289,14 @@ class VectorDBManager:
     def save_summary(self, collection_name: str, summary: str):
         """Append or update a document summary in the metadata storage."""
         try:
-            data = self.get_summary() # Fetch existing metadata map
-            key = f"{collection_name}_{self.provider}"
-            data[key] = summary
-
+            data = self.get_summary() # Fetch entire map
+            # We save under both keys to ensure compatibility during transition
+            data[collection_name] = summary
+            
             with open(self.summary_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
 
-            logger.info(f"✅ Summary saved successfully to {self.summary_path}")
+            logger.info(f"✅ Summary saved successfully for '{collection_name}' at {self.summary_path}")
 
         except Exception as e:
             logger.error(f"❌ Error while saving summary: {e}")
@@ -266,8 +318,12 @@ class VectorDBManager:
                 data = json.load(f)
             
             if collection_name:
-                key = f"{collection_name}_{self.provider}"
-                return data.get(key, {})
+                # Try direct name first, then suffixed legacy name
+                summary = data.get(collection_name)
+                if not summary:
+                    key = f"{collection_name}_{self.provider}"
+                    summary = data.get(key, {})
+                return summary
             
             return data
 

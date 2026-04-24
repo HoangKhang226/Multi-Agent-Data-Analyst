@@ -51,49 +51,59 @@ with st.sidebar:
     
     st.divider()
     
-    # 1. Mandatory Tabular Upload
-    st.subheader("1. Dữ liệu Bảng (Bắt buộc)")
+    # 1. Tabular Upload
+    st.subheader("1. Dữ liệu Bảng (CSV/Excel)")
     table_file = st.file_uploader(
         "Upload CSV hoặc Excel",
         type=["csv", "xlsx", "xls"],
         help="Cung cấp dữ liệu để thực hiện các phân tích thống kê và vẽ biểu đồ."
     )
     
-    # 2. Optional Document Upload
-    st.subheader("2. Tài liệu Văn bản (Tùy chọn)")
+    # 2. Document Upload
+    st.subheader("2. Tài liệu Văn bản (PDF/DOCX)")
     doc_file = st.file_uploader(
         "Upload PDF hoặc DOCX",
         type=["pdf", "docx"],
         help="Cung cấp ngữ cảnh văn bản để trả lời các câu hỏi về quy trình, chính sách..."
+    )
+
+    # 3. Retrieval Mode (for Docs)
+    st.subheader("3. Chế độ tìm kiếm (RAG)")
+    retrieval_mode = st.selectbox(
+        "Retrieval Strategy",
+        options=["hierarchical", "hybrid"],
+        index=0,
+        help="Hierarchical: Summary-based context. Hybrid: Vector + Keyword search."
     )
     
     st.divider()
     
     # Ingest Button
     if st.button("🚀 Xử lý dữ liệu", use_container_width=True):
-        if not table_file:
-            st.error("Vui lòng tải lên ít nhất một file dữ liệu bảng (CSV/Excel).")
+        if not table_file and not doc_file:
+            st.error("Vui lòng tải lên ít nhất một file (Bảng biểu hoặc Tài liệu).")
         else:
             with st.spinner("Đang xử lý dữ liệu..."):
                 try:
-                    # Ingest Table - FastAPI expects field name 'files'
-                    files_table = [("files", (table_file.name, table_file.getvalue(), table_file.type))]
-                    res_table = requests.post(
-                        f"{API_BASE_URL}/ingest",
-                        files=files_table,
-                        params={"embedding_provider": llm_provider}
-                    )
-                    
-                    if res_table.status_code == 200:
-                        st.success(f"✅ Đã xử lý file bảng: {table_file.name}")
-                        data = res_table.json()
-                        # data is a list [IngestResponse]
-                        st.session_state["dataframe_head"] = data[0].get("summary", "")
-                        st.session_state["dataframe_info"] = data[0].get("info", "")
-                    else:
-                        st.error(f"❌ Lỗi xử lý bảng: {res_table.text}")
+                    # Ingest Table if provided
+                    if table_file:
+                        files_table = [("files", (table_file.name, table_file.getvalue(), table_file.type))]
+                        res_table = requests.post(
+                            f"{API_BASE_URL}/ingest",
+                            files=files_table,
+                            params={"embedding_provider": llm_provider}
+                        )
+                        
+                        if res_table.status_code == 200:
+                            st.success(f"✅ Đã xử lý file bảng: {table_file.name}")
+                            data = res_table.json()
+                            st.session_state["dataframe_head"] = data[0].get("summary", "")
+                            st.session_state["dataframe_info"] = data[0].get("info", "")
+                            st.session_state["data_mode"] = "tabular"  # Tabular mode takes precedence
+                        else:
+                            st.error(f"❌ Lỗi xử lý bảng: {res_table.text}")
 
-                    # Ingest Doc (if provided)
+                    # Ingest Doc if provided
                     if doc_file:
                         files_doc = [("files", (doc_file.name, doc_file.getvalue(), doc_file.type))]
                         res_doc = requests.post(
@@ -104,11 +114,14 @@ with st.sidebar:
                         if res_doc.status_code == 200:
                             st.success(f"✅ Đã xử lý tài liệu: {doc_file.name}")
                             st.session_state["content_summary"] = res_doc.json()[0].get("summary", "")
+                            if "data_mode" not in st.session_state or not table_file:
+                                st.session_state["data_mode"] = "document"
                         else:
                             st.error(f"❌ Lỗi xử lý tài liệu: {res_doc.text}")
-                    else:
-                        st.session_state["content_summary"] = ""
-                
+                    
+                    if not table_file and not doc_file:
+                        st.session_state["data_mode"] = None
+
                 except Exception as e:
                     st.error(f"🚨 Lỗi kết nối API: {e}")
 
@@ -127,6 +140,8 @@ with st.sidebar:
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "data_mode" not in st.session_state:
+    st.session_state["data_mode"] = None
 
 # Display chat messages
 for message in st.session_state.messages:
@@ -158,7 +173,9 @@ if prompt := st.chat_input("Hỏi gì đó về dữ liệu của bạn..."):
                 "memory_provider": memory_provider,
                 "content_summary": st.session_state.get("content_summary", ""),
                 "dataframe_head": st.session_state.get("dataframe_head", ""),
-                "dataframe_info": st.session_state.get("dataframe_info", "")
+                "dataframe_info": st.session_state.get("dataframe_info", ""),
+                "data_mode": st.session_state.get("data_mode"),
+                "retrieval_mode": retrieval_mode
             }
             
             response = requests.post(f"{API_BASE_URL}/chat", json=payload)

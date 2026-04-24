@@ -6,7 +6,7 @@ Production Refactor:
 """
 
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 import matplotlib
 matplotlib.use('Agg')
@@ -19,11 +19,11 @@ from langgraph.types import Send
 
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-from src.agents.state import AgentState, SubTask, TaskResult
-from src.prompt.template import LLM_KNOWLEDGE_PROMPT
+from src.agents.state import AgentState, TaskResult
 from src.llm.factory import LLMFactory
 from src.llm.embeddings import EmbeddingFactory
 from src.retrieval.vector_db import VectorDBManager
+from src.retrieval.engine import Retriever
 from src.core.config import settings
 from src.utils.logger import logger
 
@@ -58,7 +58,7 @@ def route_after_ambiguity(state: AgentState) -> str:
 
 
 def route_after_router(state: AgentState) -> str:
-    route = state.get("route", "llm_knowledge")
+    route = state.get("route", "llm_knowledge").strip().lower()
     if route == "rag":
         has_doc = bool((state.get("content_summary") or "").strip())
         if not has_doc:
@@ -92,6 +92,8 @@ def fan_out_subtasks(state: AgentState) -> List[Send]:
         "user_id": state.get("user_id"),
         "content_summary": state.get("content_summary"),
         "user_memory": state.get("user_memory"),
+        "data_mode": state.get("data_mode"),
+        "retrieval_mode": state.get("retrieval_mode"),
     }
 
     return [
@@ -116,16 +118,14 @@ def rag_retriever(state: AgentState) -> dict:
     collection_name = state.get("collection_name") or settings.storage.collection_name
 
     try:
-        vdb = _get_vector_db(provider)
-        retriever = vdb.get_retriever(
-            similarity_top_k=settings.retrieval.top_k,
+        retriever_obj = Retriever(provider=provider)
+        nodes = retriever_obj.retrieval(
+            hyde=query,
             collection_name=collection_name,
+            k=settings.retrieval.top_k,
+            retrieval_mode=state.get("retrieval_mode", "hierarchical")
         )
-
-        if retriever is None:
-            return {"all_context": [], "sub_task_results": []}
-
-        nodes = retriever.retrieve(query)
+        
         chunks = [node.get_content() for node in nodes if node.get_content().strip()]
         
         content = "\n\n---\n\n".join(chunks)
@@ -183,31 +183,9 @@ def web_searcher(state: AgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def llm_node(state: AgentState) -> dict:
-    """Answer from internal knowledge; returns raw text."""
-    provider = _provider(state)
-    current_task = state.get("current_task")
-    if not current_task:
-        return {}
-
-    from src.agents.node import _build_memory_section
-    prompt = LLM_KNOWLEDGE_PROMPT.format(
-        current_task=current_task["description"],
-        user_memory_section=_build_memory_section(state)
-    )
-
-    try:
-        llm = _get_llm(provider, "rag")
-        response = llm.invoke(prompt)
-        
-        result_obj: TaskResult = {
-            "task": current_task["description"],
-            "type": "text",
-            "content": response.content.strip()
-        }
-        return {"sub_task_results": [result_obj]}
-    except Exception as e:
-        return {"sub_task_results": [{"type": "error", "content": f"LLM node failed: {e}"}]}
+def llm_node_stub(state: AgentState) -> dict:
+    """Old llm_node logic removed from tool.py. Original is in node.py."""
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +245,7 @@ def data_analyzer(state: AgentState, df: Optional[pd.DataFrame] = None) -> dict:
         logger.error(f"[data_analyzer] Error: {e}")
         error_msg = str(e)
         if isinstance(e, KeyError):
-            error_msg = f"Cột {e} không tồn tại. Các cột hiện có: {list(df.columns)}"
+            error_msg = f"Column {e} does not exist. Available columns: {list(df.columns)}"
         
         return {
             "sub_task_results": [{
@@ -347,9 +325,9 @@ def chart_generator(state: AgentState, df: Optional[pd.DataFrame] = None) -> dic
         logger.error(f"[chart_generator] Error: {e}")
         error_msg = str(e)
         if "None of" in error_msg and "are in the [columns]" in error_msg:
-            error_msg = f"Cột được yêu cầu không có trong dữ liệu. Các cột hiện có: {list(df.columns)}"
+            error_msg = f"Requested column not found in data. Available columns: {list(df.columns)}"
         elif isinstance(e, KeyError):
-            error_msg = f"Cột {e} không tồn tại. Các cột hiện có: {list(df.columns)}"
+            error_msg = f"Column {e} does not exist. Available columns: {list(df.columns)}"
 
         return {
             "sub_task_results": [{

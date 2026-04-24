@@ -91,7 +91,7 @@ class IngestionOrchestrator:
                 raise ValueError(f"Unsupported tabular format: {suffix}")
 
             # Create description string: head + dtypes + info + describe
-            buffer = io.StringIO() # tạo buffer để lưu thông tin của dataframe
+            buffer = io.StringIO() # Buffer to capture dataframe info
             df.info(buf=buffer)
             info_str = buffer.getvalue()
 

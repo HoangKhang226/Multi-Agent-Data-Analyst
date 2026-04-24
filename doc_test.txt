@@ -1,0 +1,4 @@
+Dự án: Hệ thống Phân tích Dữ liệu Đa tác vụ.
+Thành viên: Nguyễn Văn A, Trần Thị B.
+Công nghệ sử dụng: LangGraph, LlamaIndex, FastAPI.
+Mục tiêu: Cung cấp khả năng chat với cả bảng biểu và tài liệu văn bản.
