@@ -22,6 +22,8 @@ chromadb
 # LlamaIndex
 llama-index
 llama-index-vector-stores-chroma
+llama-index-vector-stores-qdrant
+qdrant-client
 llama-index-embeddings-google-genai
 llama-index-llms-google-genai
 llama-index-embeddings-ollama
