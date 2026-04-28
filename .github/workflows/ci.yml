@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PYTHONPATH: src:tests
+      PYTHONPATH: .:src:tests
       # tránh matplotlib lỗi display
       MPLBACKEND: Agg
 
