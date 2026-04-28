@@ -53,6 +53,5 @@ logs/
 Thumbs.db
 
 # User specific walkthroughs/tasks (Internal)
-debug_*.py
-test_*.py
-!test_system_e2e.py # Just in case
+tests/
+
