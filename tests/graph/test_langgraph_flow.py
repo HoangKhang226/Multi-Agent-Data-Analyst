@@ -1,4 +1,4 @@
-from tests.mocks.fake_llm import FakeLLM
+from mocks.fake_llm import FakeLLM
 
 
 def router_node(state):
