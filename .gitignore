@@ -52,6 +52,4 @@ logs/
 .DS_Store
 Thumbs.db
 
-# User specific walkthroughs/tasks (Internal)
-tests/
 
