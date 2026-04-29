@@ -51,9 +51,32 @@ graph TD
 - **RAG Engine**: [LlamaIndex](https://www.llamainindex.ai/)
 - **Large Language Models**: Google Gemini 2.5 Flash / Ollama
 - **Memory**: [Mem0](https://mem0.ai/)
-- **Vector Database**: ChromaDB
+- **Vector Database**: Qdrant
 - **Backend**: FastAPI
 - **Frontend**: Streamlit
+
+## 📁 Project Structure
+
+```text
+├── .github/          # GitHub Actions CI/CD workflows
+├── config/           # Configuration files (YAML format)
+├── data/             # Raw datasets and test data
+├── logs/             # Application execution logs
+├── notebooks/        # Jupyter notebooks for experimentation and analysis
+├── src/              # Core application source code
+│   ├── agents/       # LangGraph nodes and agent components
+│   ├── api/          # FastAPI backend server
+│   ├── core/         # Orchestrator and global configurations
+│   ├── llm/          # LLM integrations (Gemini, Ollama, Embeddings)
+│   ├── memory/       # Mem0 long-term memory integration
+│   ├── processors/   # Document processing and chunking (PDF, Word)
+│   ├── prompt/       # LLM prompt templates
+│   ├── retrieval/    # RAG engines and vector DB managers
+│   ├── ui/           # Streamlit frontend application
+│   └── utils/        # Shared utilities like logging
+├── storage/          # Local persistent storage (Mem0, VectorDBs, Parquets)
+└── tests/            # Unit, integration, and end-to-end tests
+```
 
 ## 🚦 Getting Started
 
