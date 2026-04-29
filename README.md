@@ -8,16 +8,23 @@ This system allows users to upload datasets (CSV/Excel) and documents (PDF/Docx)
 
 - **Pandas Agent**: For statistical analysis and data visualization.
 - **RAG Agent**: For precise information retrieval from documents.
+- **Web Search Agent**: For real-time information from the internet via Tavily.
 - **Long-term Memory**: Powered by Mem0 to remember user preferences and facts across sessions.
+- **SQL Persistence Layer**: Tracks users, datasets, chat sessions, messages, and agent execution logs.
 
 ## ✨ Key Features
 
-- **Multi-Source Data Ingestion**: Seamlessly process structured tables and unstructured documents.
-- **Advanced RAG Pipeline**: Uses **Hierarchical Auto-Merging Retrieval** for superior context extraction.
-- **Dynamic Routing**: Automatically decides whether to use a tabular engine, RAG, or general AI knowledge.
-- **Isolated Storage**: Collection-level isolation to prevent data corruption between different datasets.
-- **Interactive Visualization**: Generates charts and plots based on data queries.
-- **User Personalization**: Learns from previous interactions to provide more relevant insights.
+- **Multi-Source Data Ingestion**: Seamlessly process structured tables (CSV/Excel) and unstructured documents (PDF/DOCX).
+- **Advanced RAG Pipeline**: Supports two retrieval strategies:
+  - **Hierarchical Auto-Merging Retrieval**: Traverses parent → child node trees for high-precision document context.
+  - **Hybrid Search**: Combines dense vector search with BM25 keyword search for broader coverage.
+- **Dynamic Routing**: Automatically decides whether to use a tabular engine, RAG, web search, or general AI knowledge.
+- **HyDE Query Expansion**: Generates a hypothetical document to improve semantic search accuracy before retrieval.
+- **Isolated Storage**: Collection-level isolation in Qdrant to prevent data corruption between different datasets.
+- **Interactive Visualization**: Generates charts and plots based on data queries, displayed directly in chat.
+- **User Personalization**: Learns user identity, preferences, and goals via Mem0 long-term memory (per-user, per-provider).
+- **Full Observability**: LangSmith tracing for every agent run, plus SQLite-backed audit logs.
+- **Premium Streamlit UI**: Dark glassmorphism interface with live provider switching and memory management.
 
 ## 🏗 Architecture
 
@@ -27,56 +34,85 @@ graph TD
     UI --> API[FastAPI Backend]
     API --> Orchestrator[Pipeline Orchestrator]
 
-    subgraph Agents [Agentic Pipeline]
-        Router{Knowledge Router}
+    subgraph Agents [Agentic Pipeline - LangGraph]
+        Memory1[Retrieve Memory] --> Compressor[Context Compressor]
+        Compressor --> Ambiguity{Ambiguity Checker}
+        Ambiguity -->|Clear| Planner[Planner]
+        Ambiguity -->|Ambiguous| Rejection[Rejection Handler]
+
+        Planner --> FanOut[Fan-out Sub-tasks]
+        FanOut --> Router{Knowledge Router}
+
         Router --> |Tabular| Pandas[Pandas Runner]
         Router --> |Text| RAG[RAG Node]
+        Router --> |Web| Web[Web Searcher]
         Router --> |General| LLM[General LLM]
 
         Pandas --> Synthesizer
         RAG --> Synthesizer
+        Web --> Synthesizer
         LLM --> Synthesizer
 
-        Synthesizer[Response Synthesizer]
+        Synthesizer[Response Synthesizer] --> Memory2[Update Memory]
     end
 
     Orchestrator --> Agents
     Agents --> Memory[(Mem0 Long-term Memory)]
-    Agents --> VectorDB[(Isolated Vector Store)]
+    Agents --> VectorDB[(Qdrant Vector Store)]
+    Agents --> SqlDB[(SQLite Audit DB)]
 ```
 
 ## 🛠 Tech Stack
 
-- **Framework**: [LangGraph](https://github.com/langchain-ai/langgraph)
-- **RAG Engine**: [LlamaIndex](https://www.llamainindex.ai/)
-- **Large Language Models**: Google Gemini 2.5 Flash / Ollama
-- **Memory**: [Mem0](https://mem0.ai/)
-- **Vector Database**: Qdrant
-- **Backend**: FastAPI
-- **Frontend**: Streamlit
+| Category | Technology |
+|---|---|
+| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) |
+| **RAG Engine** | [LlamaIndex](https://www.llamaindex.ai/) |
+| **LLM (Cloud)** | Google Gemini 2.5 Flash |
+| **LLM (Local)** | [Ollama](https://ollama.com/) (Qwen3:8b, nomic-embed-text) |
+| **Memory** | [Mem0](https://mem0.ai/) + ChromaDB |
+| **Vector Database** | [Qdrant](https://qdrant.tech/) (local) |
+| **Reranker** | BAAI/bge-reranker-v2-m3 |
+| **Web Search** | [Tavily API](https://tavily.com/) |
+| **SQL Persistence** | SQLite + SQLAlchemy |
+| **Backend** | FastAPI |
+| **Frontend** | Streamlit |
+| **Observability** | [LangSmith](https://smith.langchain.com/) |
 
 ## 📁 Project Structure
 
 ```text
-├── .github/          # GitHub Actions CI/CD workflows
 ├── config/           # Configuration files (YAML format)
+│   └── setting.yaml  # Main config: providers, chunking, retrieval params
 ├── data/             # Raw datasets and test data
 ├── logs/             # Application execution logs
-├── notebooks/        # Jupyter notebooks for experimentation and analysis
 ├── src/              # Core application source code
-│   ├── agents/       # LangGraph nodes and agent components
-│   ├── api/          # FastAPI backend server
-│   ├── core/         # Orchestrator and global configurations
-│   ├── llm/          # LLM integrations (Gemini, Ollama, Embeddings)
-│   ├── memory/       # Mem0 long-term memory integration
+│   ├── agents/       # LangGraph nodes, state, graph topology, memory nodes
+│   ├── api/          # FastAPI backend server (endpoints, schemas)
+│   ├── core/         # Orchestrator, global configurations, Pydantic settings
+│   ├── db/           # SQLAlchemy models, DatabaseManager, CRUD helpers
+│   ├── llm/          # LLM factory, embeddings (Gemini & Ollama)
+│   ├── memory/       # LongTermMemoryManager (Mem0 OOP wrapper)
 │   ├── processors/   # Document processing and chunking (PDF, Word)
-│   ├── prompt/       # LLM prompt templates
-│   ├── retrieval/    # RAG engines and vector DB managers
-│   ├── ui/           # Streamlit frontend application
-│   └── utils/        # Shared utilities like logging
-├── storage/          # Local persistent storage (Mem0, VectorDBs, Parquets)
-└── tests/            # Unit, integration, and end-to-end tests
+│   ├── prompt/       # All LLM prompt templates
+│   ├── retrieval/    # VectorDBManager (Qdrant), hierarchical & hybrid retrieval
+│   ├── ui/           # Streamlit frontend (glassmorphism dark theme)
+│   └── utils/        # Shared utilities (logging)
+├── storage/          # Local persistent storage (Mem0 ChromaDB, Qdrant, SQLite)
+└── requirements.txt  # Python dependencies
 ```
+
+## 🗄 Database Schema
+
+The SQL persistence layer (SQLite via SQLAlchemy) tracks full system state:
+
+| Table | Description |
+|---|---|
+| `users` | Registered user profiles |
+| `datasets` | Uploaded files with metadata (type, path, provider) |
+| `chat_sessions` | Conversation sessions linked to users and datasets |
+| `messages` | Individual chat messages (user/assistant) per session |
+| `agent_runs` | Execution logs for each LangGraph node (latency, status) |
 
 ## 🚦 Getting Started
 
@@ -84,49 +120,107 @@ graph TD
 
 - Python 3.10+
 - Virtual environment (recommended)
-- API Keys for Google Gemini (optional if using Ollama)
+- [Qdrant](https://qdrant.tech/documentation/quickstart/) running locally (default: `localhost:6333`)
+- API Keys: `GOOGLE_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`
+- *(Optional)* [Ollama](https://ollama.com/) for fully local inference
 
 ### Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/HoangKhang226/Multi-Agent-Data-Analyst.git
    cd Multi-Agent-Data-Analyst
    ```
 2. Create and activate virtual environment:
    ```bash
    python -m venv venv
+   # Windows
    .\venv\Scripts\Activate.ps1
+   # macOS / Linux
+   source venv/bin/activate
    ```
 3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
+4. Configure environment variables — create a `.env` file at the project root:
+   ```env
+   GOOGLE_API_KEY=your_google_api_key
+   TAVILY_API_KEY=your_tavily_api_key
+   LANGSMITH_API_KEY=your_langsmith_api_key
+   ```
+5. *(Optional)* Edit `config/setting.yaml` to switch providers, tune chunking params, or change retrieval thresholds.
 
 ### Running the Application
 
-1. Start the Backend API:
+1. Start Qdrant (if not already running):
+   ```bash
+   docker run -p 6333:6333 qdrant/qdrant
+   ```
+2. Start the Backend API:
    ```bash
    python -m src.api.main
    ```
-2. Start the Streamlit UI:
+3. Start the Streamlit UI (in a separate terminal):
    ```bash
    streamlit run src/ui/app.py
    ```
+4. Open your browser at `http://localhost:8501`.
+
+### Ollama (Local Mode)
+
+To run fully offline without Google API keys:
+
+1. Install and start Ollama: https://ollama.com/download
+2. Pull the required models:
+   ```bash
+   ollama pull qwen3:8b
+   ollama pull nomic-embed-text
+   ```
+3. In `config/setting.yaml`, set:
+   ```yaml
+   graph_provider: ollama
+   memory_provider: ollama
+   ```
+
+## ⚙️ Configuration Reference
+
+Key settings in `config/setting.yaml`:
+
+| Key | Description | Default |
+|---|---|---|
+| `graph_provider` | LLM backend for the agent pipeline | `gemini` |
+| `memory_provider` | Backend for Mem0 memory | `gemini` |
+| `retrieval.top_k` | Number of chunks retrieved per query | `5` |
+| `retrieval.threshold` | Minimum similarity score for retrieval | `0.7` |
+| `chunking.parent_chunk_size` | Token size for parent nodes in hierarchical RAG | `1024` |
+| `chunking.child_chunk_size` | Token size for child nodes | `256` |
+| `database.url` | SQLAlchemy connection string | `sqlite:///storage/app.db` |
+| `memory.chroma_path` | Path for Mem0's ChromaDB vector store | `storage/mem0_chroma` |
 
 ## 🧪 Testing
 
-We provide a comprehensive end-to-end test script:
+Run the integration test suite to verify database operations:
 
 ```bash
-python run_final_test.py
+python -m pytest tests/integration/ -v
 ```
 
-This script verifies:
+Key integration tests:
 
-- Data Ingestion for both CSV and PDF.
-- Correct routing to specialized agents.
-- Successful context retrieval and chart generation.
+| Test | What it verifies |
+|---|---|
+| `test_db_manager.py` | E2E flow: Ingestion → Chat → Agent logging |
+| `test_db_crud.py` | CRUD operations for all database tables |
+
+## 🔭 Observability
+
+Every agent run is tracked via **LangSmith**. Configure your `LANGSMITH_API_KEY` and `LANGSMITH_PROJECT` in `.env` to see:
+
+- Full execution traces for each LangGraph node
+- Token usage per LLM call
+- Latency breakdown across the pipeline
+- Memory retrieval and update events
 
 ## 📄 License
 
