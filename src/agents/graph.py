@@ -208,6 +208,7 @@ def build_graph(df=None):
 
 def make_initial_state(
     provider: str = None,
+    embedding_provider: str = None,
     memory_provider: str = None,
     collection_name: str = None,
     user_id: str = None,
@@ -219,6 +220,8 @@ def make_initial_state(
     
     if provider:
         state["llm_provider"] = provider
+    if embedding_provider:
+        state["embedding_provider"] = embedding_provider
     if memory_provider:
         state["memory_provider"] = memory_provider
     if collection_name:

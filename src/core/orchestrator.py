@@ -15,6 +15,18 @@ from src.prompt.template import CONTEXT_COMPRESSION_PROMPT
 class IngestionOrchestrator:
     """Orchestrate document ingestion: Extract -> Chunk -> Embed -> Index."""
 
+    @staticmethod
+    def make_collection_name(filename: str) -> str:
+        """Generate a safe, unique collection name from a filename.
+        
+        Example: 'My Report (2024).pdf' -> 'my_report_2024'
+        """
+        import re
+        stem = Path(filename).stem  # strip extension
+        safe = re.sub(r'[^a-zA-Z0-9]+', '_', stem)  # replace non-alphanumeric with _
+        safe = safe.strip('_').lower()[:48]  # max 48 chars, lowercase
+        return safe or "default_collection"
+
     def __init__(self, provider: Optional[str] = None):
         self.provider = provider or settings.graph_provider
         self.pdf_engine = PDFEngine()
@@ -43,7 +55,7 @@ class IngestionOrchestrator:
             logger.error(f"Error generating automatic summary: {e}")
             return "Document summary unavailable."
 
-    async def ingest_pdf(self, pdf_path: Path, embedding_provider: Optional[str] = None) -> dict:
+    async def ingest_pdf(self, pdf_path: Path, original_filename: Optional[str] = None, embedding_provider: Optional[str] = None) -> dict:
         """Run the full PDF ingestion pipeline."""
         provider = embedding_provider or self.provider
         
@@ -59,20 +71,22 @@ class IngestionOrchestrator:
         embedding_model = self.embedding_factory.get_embedding(provider=provider)
         db_manager = VectorDBManager(embedding_model=embedding_model, provider=provider)
         
-        # 4. Index into vector database
+        # 4. Index into vector database — use per-file collection name
+        fname = original_filename or pdf_path.name
+        collection_name = self.make_collection_name(fname)
         ids = db_manager.add_documents(
-            all_nodes, collection_name=settings.storage.collection_name
+            all_nodes, collection_name=collection_name
         )
 
         # 5. Generate and store metadata summary
         summary = await self.generate_summary(all_nodes, self.provider)
-        db_manager.save_summary(settings.storage.collection_name, summary)
+        db_manager.save_summary(collection_name, summary)
 
         return {
             "status": "success",
             "filename": pdf_path.name,
             "chunks_count": len(ids),
-            "collection": settings.storage.collection_name,
+            "collection": collection_name,
             "summary": summary,
             "provider": provider
         }

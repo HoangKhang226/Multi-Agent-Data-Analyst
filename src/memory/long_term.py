@@ -148,6 +148,7 @@ class LongTermMemoryManager:
                 return ""
 
             facts = [r.get("memory", "") for r in results["results"] if r.get("memory")]
+            facts = facts[:5]  # Strictly limit to 5 facts as requested by user
             if not facts:
                 return ""
 

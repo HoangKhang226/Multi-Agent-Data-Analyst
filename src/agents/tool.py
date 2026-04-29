@@ -109,7 +109,7 @@ def fan_out_subtasks(state: AgentState) -> List[Send]:
 
 def rag_retriever(state: AgentState) -> dict:
     """Retrieve raw chunks; no interpretation."""
-    provider = _provider(state)
+    provider = state.get("embedding_provider") or _provider(state)
     current_task = state.get("current_task")
     if not current_task:
         return {}

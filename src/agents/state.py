@@ -55,6 +55,7 @@ class AgentState(TypedDict):
     session_id: Annotated[Optional[int], write_once]
     user_id: Annotated[Optional[str], write_once]
     llm_provider: Annotated[Optional[str], write_once]
+    embedding_provider: Annotated[Optional[str], write_once]
     memory_provider: Annotated[Optional[str], write_once]
     collection_name: Annotated[Optional[str], write_once]
     

@@ -19,6 +19,10 @@ class VectorDBManager:
     def __init__(self, embedding_model, provider: str = "ollama"):
         self.embedding_model = embedding_model
         self.provider = provider.lower()
+        
+        # Handle provider aliases (ensure consistency with EmbeddingFactory)
+        if self.provider == "gemini":
+            self.provider = "google"
 
         # Set up base storage path
         self.base_storage_dir = Path(__file__).resolve().parents[2] / "storage"

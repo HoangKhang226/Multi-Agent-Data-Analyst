@@ -231,6 +231,8 @@ defaults = {
     "dataframe_info": "",
     "user_id": "guest",
     "api_healthy": None,
+    "indexed_files": [],        # list of {filename, collection, data_mode, summary}
+    "selected_collection": None, # currently selected collection for chat
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -394,6 +396,17 @@ with st.sidebar:
                             st.session_state["dataframe_head"] = data.get("summary", "")
                             st.session_state["dataframe_info"] = data.get("info", "")
                             st.session_state["data_mode"] = "tabular"
+                            # Track this file
+                            coll = data.get("collection", "tabular")
+                            existing = [f["collection"] for f in st.session_state["indexed_files"]]
+                            if coll not in existing:
+                                st.session_state["indexed_files"].append({
+                                    "filename": table_file.name,
+                                    "collection": coll,
+                                    "data_mode": "tabular",
+                                    "summary": data.get("summary", ""),
+                                    "info": data.get("info", ""),
+                                })
                             st.success(f"✅ Bảng biểu: **{table_file.name}**")
                         else:
                             st.error(f"❌ Lỗi bảng: {res.text[:200]}")
@@ -410,6 +423,17 @@ with st.sidebar:
                             st.session_state["content_summary"] = data.get("summary", "")
                             if "data_mode" not in st.session_state or not table_file:
                                 st.session_state["data_mode"] = "document"
+                            # Track this file
+                            coll = data.get("collection", "")
+                            existing = [f["collection"] for f in st.session_state["indexed_files"]]
+                            if coll and coll not in existing:
+                                st.session_state["indexed_files"].append({
+                                    "filename": doc_file.name,
+                                    "collection": coll,
+                                    "data_mode": "document",
+                                    "summary": data.get("summary", ""),
+                                    "info": "",
+                                })
                             st.success(f"✅ Tài liệu: **{doc_file.name}**")
                         else:
                             st.error(f"❌ Lỗi tài liệu: {res.text[:200]}")
@@ -418,6 +442,59 @@ with st.sidebar:
                     st.error("🚨 Không kết nối được API. Kiểm tra server đang chạy.")
                 except Exception as e:
                     st.error(f"🚨 Lỗi: {e}")
+
+    st.divider()
+
+    # ── 4b. File / Collection selector ──
+    st.markdown('<div class="sidebar-section">📂 Tài liệu đang query</div>', unsafe_allow_html=True)
+
+    indexed = st.session_state.get("indexed_files", [])
+    if indexed:
+        # Build labels for selectbox
+        labels = []
+        for f in indexed:
+            icon = "📋" if f["data_mode"] == "tabular" else "📄"
+            labels.append(f"{icon} {f['filename']}")
+
+        # Auto-select last uploaded if nothing selected
+        current_coll = st.session_state.get("selected_collection")
+        current_idx = 0
+        if current_coll:
+            colls = [f["collection"] for f in indexed]
+            if current_coll in colls:
+                current_idx = colls.index(current_coll)
+
+        chosen_label = st.selectbox(
+            "Chọn file để query",
+            options=labels,
+            index=current_idx,
+            label_visibility="collapsed",
+            help="Mỗi file được index vào collection riêng biệt. Chọn file bạn muốn hỏi.",
+        )
+        chosen_idx = labels.index(chosen_label)
+        chosen_file = indexed[chosen_idx]
+
+        # Update session state from selection
+        st.session_state["selected_collection"] = chosen_file["collection"]
+        st.session_state["data_mode"] = chosen_file["data_mode"]
+        if chosen_file["data_mode"] == "document":
+            st.session_state["content_summary"] = chosen_file.get("summary", "")
+            st.session_state["dataframe_head"] = ""
+            st.session_state["dataframe_info"] = ""
+        else:
+            st.session_state["content_summary"] = ""
+            st.session_state["dataframe_head"] = chosen_file.get("summary", "")
+            st.session_state["dataframe_info"] = chosen_file.get("info", "")
+
+        st.markdown(
+            f'<div class="info-box">🔑 Collection: <code>{chosen_file["collection"]}</code></div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<div class="warn-box">📭 Chưa có file nào được index. Upload file ở trên rồi nhấn Xử lý.</div>',
+            unsafe_allow_html=True
+        )
 
     st.divider()
 
@@ -601,6 +678,7 @@ if prompt:
             "dataframe_info": st.session_state.get("dataframe_info", ""),
             "data_mode": st.session_state.get("data_mode"),
             "retrieval_mode": retrieval_mode,
+            "collection_name": st.session_state.get("selected_collection"),
         }
 
         try:
