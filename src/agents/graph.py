@@ -23,9 +23,8 @@ START
 """
 
 import functools
-from typing import Optional
-
-from langgraph.graph import StateGraph, END, START
+import inspect
+from langgraph.graph import StateGraph, END
 
 from src.agents.state import AgentState, create_initial_state
 from src.agents.node import (
@@ -49,12 +48,64 @@ from src.agents.tool import (
     chart_generator,
 )
 from src.utils.logger import logger
+import time
+from src.db.database import db_manager
+from src.db.crud import log_agent_run
 
+
+# ---------------------------------------------------------------------------
+# Log wrapper
+# ---------------------------------------------------------------------------
+
+def agent_run_logger(node_func, node_name: str):
+    """Wrap a node function to log its execution into the SQL DB.
+
+    Handles both sync and async node callables, including
+    ``functools.partial``-wrapped async functions.
+    Uses ``db_manager.session()`` for automatic commit/rollback.
+    """
+    # Unwrap partial so iscoroutinefunction sees the real callable
+    _underlying = getattr(node_func, "func", node_func)
+    _is_async = inspect.iscoroutinefunction(_underlying)
+
+    @functools.wraps(node_func)
+    async def wrapper(state: AgentState):
+        t0 = time.time()
+
+        if _is_async:
+            result = await node_func(state)
+        else:
+            result = node_func(state)
+
+        latency_ms = (time.time() - t0) * 1000
+
+        session_id = state.get("session_id")
+        if session_id:
+            output_preview = str(result)[:500]
+            input_preview = str(state.get("current_task") or state.get("question") or "")[:500]
+
+            status = "ok"
+            if isinstance(result, dict):
+                for res in result.get("sub_task_results", []):
+                    if isinstance(res, dict) and res.get("type") == "error":
+                        status = "error"
+                        break
+
+            try:
+                with db_manager.session() as db_session:
+                    log_agent_run(
+                        db_session, session_id, node_name,
+                        input_preview, output_preview, latency_ms, status,
+                    )
+            except Exception as e:
+                logger.error(f"Failed to log agent run for {node_name}: {e}")
+
+        return result
+    return wrapper
 
 # ---------------------------------------------------------------------------
 # Sub-task subgraph
 # ---------------------------------------------------------------------------
-
 
 def build_subtask_subgraph(df=None):
     """Compile the per-sub-task retrieval mini-pipeline."""
@@ -64,13 +115,14 @@ def build_subtask_subgraph(df=None):
     bound_analyzer = functools.partial(data_analyzer, df=df)
     bound_visualizer = functools.partial(chart_generator, df=df)
 
-    sg.add_node("knowledge_router", knowledge_router)
-    sg.add_node("hyde", hyde)
-    sg.add_node("rag_retriever", rag_retriever)
-    sg.add_node("web_searcher", web_searcher)
-    sg.add_node("llm_node", llm_node)
-    sg.add_node("data_analyzer", bound_analyzer)
-    sg.add_node("chart_generator", bound_visualizer)
+    # add node but wrap log
+    sg.add_node("knowledge_router", agent_run_logger(knowledge_router, "knowledge_router"))
+    sg.add_node("hyde", agent_run_logger(hyde, "hyde"))
+    sg.add_node("rag_retriever", agent_run_logger(rag_retriever, "rag_retriever"))
+    sg.add_node("web_searcher", agent_run_logger(web_searcher, "web_searcher"))
+    sg.add_node("llm_node", agent_run_logger(llm_node, "llm_node"))
+    sg.add_node("data_analyzer", agent_run_logger(bound_analyzer, "data_analyzer"))
+    sg.add_node("chart_generator", agent_run_logger(bound_visualizer, "chart_generator"))
 
     sg.set_entry_point("knowledge_router")
 

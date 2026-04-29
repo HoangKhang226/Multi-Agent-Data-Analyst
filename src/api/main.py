@@ -27,7 +27,9 @@ from src.llm.embeddings import EmbeddingFactory
 from src.retrieval.vector_db import VectorDBManager
 from src.agents.graph import build_graph, make_initial_state
 from src.llm.factory import LLMFactory
-from src.memory.long_term import _get_memory
+from src.memory.long_term import memory_manager
+from src.db.database import init_db, get_db, db_manager
+from src.db.crud import create_dataset, create_session, log_message
 
 # ---------------------------------------------------------------------------
 # App bootstrap
@@ -50,12 +52,13 @@ app.mount("/charts", StaticFiles(directory="output_charts"), name="charts") # Ma
 
 @app.on_event("startup") # Run on startup to avoid multiple LLM re-configs
 async def on_startup():
-    """Configure LlamaIndex global settings once on startup."""
+    """Configure LlamaIndex global settings once on startup and initialize DB."""
     try:
+        init_db()
         LLMFactory.configure_llama_index_settings()
-        logger.info("[startup] LlamaIndex global settings configured.")
+        logger.info("[startup] LlamaIndex global settings configured and DB initialized.")
     except Exception as e:
-        logger.error(f"[startup] Failed to configure LlamaIndex settings: {e}")
+        logger.error(f"[startup] Failed to configure settings: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -118,10 +121,10 @@ class MemoryResponse(BaseModel):
 @app.get("/", tags=["Meta"])
 def root():
     return {
-        "message": "Chat With Data API is running ✅",
+        "message": "Chat With Data API is running \u2705",
         "project": settings.app.project_name,
         "version": settings.app.version,
-        "default_provider": settings.llm.provider,
+        "default_provider": settings.graph_provider,
     }
 
 
@@ -162,6 +165,23 @@ async def ingest_document(
                 orchestrator = IngestionOrchestrator(provider=embedding_provider)
                 res = await orchestrator.ingest_pdf(tmp_path, embedding_provider=embedding_provider)
                 res["data_mode"] = "document" # Explicitly set for UI/Routing
+                
+                # Persist dataset in SQL DB
+                try:
+                    with db_manager.session() as db_session:
+                        create_dataset(
+                            db=db_session,
+                            user_id="guest",
+                            filename=file.filename,
+                            collection_name=res["collection"],
+                            provider=embedding_provider or "default",
+                            data_mode="document",
+                            chunks_count=res["chunks_count"],
+                            summary=res["summary"]
+                        )
+                except Exception as db_err:
+                    logger.warning(f"[/ingest] Failed to persist dataset record: {db_err}")
+
                 result.append(IngestResponse(**res))
             else:
                 # Tabular data handling
@@ -177,6 +197,22 @@ async def ingest_document(
                 df.to_parquet(active_df_path)
                 logger.info(f"[/ingest] Persisted tabular data to {active_df_path}")
                 
+                # Persist dataset in SQL DB
+                try:
+                    with db_manager.session() as db_session:
+                        create_dataset(
+                            db=db_session,
+                            user_id="guest",
+                            filename=file.filename,
+                            collection_name="tabular",
+                            provider="data_analyzer",
+                            data_mode="tabular",
+                            chunks_count=0,
+                            summary=res["dataframe_head"]
+                        )
+                except Exception as db_err:
+                    logger.warning(f"[/ingest] Failed to persist tabular dataset record: {db_err}")
+
                 # Construct a response compatible with IngestResponse
                 result.append(IngestResponse(
                     status="success",
@@ -255,8 +291,30 @@ async def chat(request: ChatRequest):
 
     logger.info(f"[/chat] question='{request.question}' | llm={llm_provider} | user={user_id}")
 
+    from src.db.crud import get_dataset_by_collection
+    db_session = db_manager.get_session()
     try:
+        # Load dataset_id from collection name to link the chat session
+        ds = get_dataset_by_collection(db_session, settings.storage.collection_name)
+        dataset_id = ds.id if ds else None
+
+        # Create session & log user message
+        chat_session = create_session(db_session, user_id=user_id, dataset_id=dataset_id)
+        log_message(db_session, chat_session.id, "user", request.question)
+
+        # Inject the session ID into agent state so nodes can log agent runs
+        state["session_id"] = chat_session.id
+
         result = await agent_graph.ainvoke(state)
+
+        final_answer = result.get("final_answer")
+        # Log assistant response
+        log_message(
+            db_session, chat_session.id, "assistant",
+            final_answer if final_answer else str(result),
+        )
+        db_session.commit()
+
         return ChatResponse(
             question=request.question,
             answer=result.get("final_answer"),
@@ -272,8 +330,11 @@ async def chat(request: ChatRequest):
             },
         )
     except Exception as e:
+        db_session.rollback()
         logger.error(f"[/chat] Graph error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_session.close()
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +343,14 @@ async def chat(request: ChatRequest):
 
 
 @app.get("/memory/{user_id}", response_model=MemoryResponse, tags=["Memory"])
-def get_memory(user_id: str):
+def get_memory(
+    user_id: str,
+    provider: Optional[str] = Query(None, description="Memory provider: 'gemini' | 'ollama'")
+):
     """Retrieve all stored long-term memories for a specific user."""
     try:
-        mem0 = _get_memory()
-        results = mem0.get_all(user_id=user_id)
+        mem0 = memory_manager.get_mem0(provider=provider)
+        results = mem0.get_all(filters={"user_id": user_id})
         # Handle both list and dict results from mem0
         memories = results.get("results", []) if isinstance(results, dict) else results
         return MemoryResponse(user_id=user_id, memories=memories or [])
@@ -296,10 +360,13 @@ def get_memory(user_id: str):
 
 
 @app.delete("/memory/{user_id}", tags=["Memory"])
-def clear_memory(user_id: str):
+def clear_memory(
+    user_id: str,
+    provider: Optional[str] = Query(None, description="Memory provider: 'gemini' | 'ollama'")
+):
     """Clear all stored long-term memories for a specific user."""
     try:
-        mem0 = _get_memory()
+        mem0 = memory_manager.get_mem0(provider=provider)
         mem0.delete_all(user_id=user_id)
         return {"status": "success", "message": f"All memories for '{user_id}' have been cleared."}
     except Exception as e:
@@ -319,7 +386,7 @@ async def reset_database(
     ),
 ):
     """Delete all indexed documents for the specified embedding provider."""
-    provider = embedding_provider or settings.llm.provider
+    provider = embedding_provider or settings.graph_provider
     try:
         embedding = EmbeddingFactory().get_embedding(provider=provider)
         db = VectorDBManager(embedding_model=embedding, provider=provider)

@@ -22,6 +22,8 @@ storage/
 output_charts/
 temp/
 exports/
+notebooks/
+scripts/
 
 # Data files (Optional: common to ignore raw large data in git)
 *.csv
@@ -52,4 +54,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-
+.github/
+run_final_test.py
+tests/

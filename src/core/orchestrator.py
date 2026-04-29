@@ -16,7 +16,7 @@ class IngestionOrchestrator:
     """Orchestrate document ingestion: Extract -> Chunk -> Embed -> Index."""
 
     def __init__(self, provider: Optional[str] = None):
-        self.provider = provider or settings.llm.provider
+        self.provider = provider or settings.graph_provider
         self.pdf_engine = PDFEngine()
         self.chunker = Chunker()
         self.embedding_factory = EmbeddingFactory()

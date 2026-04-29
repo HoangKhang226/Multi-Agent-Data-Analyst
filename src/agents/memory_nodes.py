@@ -10,7 +10,7 @@ as if no memory existed.
 from __future__ import annotations
 
 from src.agents.state import AgentState
-from src.memory.long_term import get_user_facts, save_user_facts, extract_memory
+from src.memory.long_term import memory_manager
 from src.utils.logger import logger
 
 
@@ -26,7 +26,7 @@ async def retrieve_memory_node(state: AgentState) -> dict:
 
     logger.info(f"[MemoryNode] Retrieving memory for user '{user_id}'...")
 
-    user_memory = await get_user_facts(query=question, user_id=user_id, provider=state.get("memory_provider"))
+    user_memory = await memory_manager.get_user_facts(query=question, user_id=user_id, provider=state.get("memory_provider"))
 
     if user_memory:
         logger.info(f"[MemoryNode] Found memory context for '{user_id}'.")
@@ -54,7 +54,7 @@ async def update_memory_node(state: AgentState) -> dict:
     logger.info(f"[MemoryNode] Saving conversation turn for user '{user_id}'...")
     
     # We pass the conversation context to save_user_facts which handles extraction
-    saved_facts = await save_user_facts(
+    saved_facts = await memory_manager.save_user_facts(
         messages=[
             {"role": "user", "content": question},
             {"role": "assistant", "content": final_answer}

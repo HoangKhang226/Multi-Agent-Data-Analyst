@@ -84,6 +84,11 @@ class AppConfig(BaseModel):
     debug: bool
 
 
+class DatabaseConfig(BaseModel):
+    """Database configuration for SQL persistence layer."""
+
+    url: str = "sqlite:///storage/app.db"
+
 class Settings(BaseSettings):
     """Application-wide settings loaded from .env and setting.yaml.
 
@@ -107,6 +112,7 @@ class Settings(BaseSettings):
     chunking: ChunkingConfig
     storage: PathConfig
     memory: MemoryConfig = MemoryConfig()
+    database: DatabaseConfig = DatabaseConfig()
     langsmith: LangsmithConfig
 
     model_config = SettingsConfigDict(

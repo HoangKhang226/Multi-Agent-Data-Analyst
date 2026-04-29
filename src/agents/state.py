@@ -8,10 +8,15 @@ from langchain_core.messages import BaseMessage
 # ==============================
 
 def write_once(old, new):
-    """Keep the first value assigned to the field."""
-    if old is not None: # If old value exists, keep it
+    """Keep the first **non-None** value assigned to the field.
+
+    Treating ``None`` as "not yet written" lets the API layer inject
+    identifiers such as ``session_id`` into a freshly-created state dict
+    without being blocked by the initial ``None`` default.
+    """
+    if old is not None:  # Already has a real value — keep it
         return old
-    return new
+    return new  # old is None → accept the incoming value
 
 def safe_add_list(old, new):
     """Parallel-safe list concatenation."""
@@ -47,7 +52,7 @@ class AgentState(TypedDict):
     # 1. Session & Identity (READ ONLY after init)
     # ------------------------------------------------------------------
 
-    session_id: Annotated[Optional[str], write_once]
+    session_id: Annotated[Optional[int], write_once]
     user_id: Annotated[Optional[str], write_once]
     llm_provider: Annotated[Optional[str], write_once]
     memory_provider: Annotated[Optional[str], write_once]
