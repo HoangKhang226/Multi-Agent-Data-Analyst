@@ -390,25 +390,63 @@ Hoặc nếu bạn muốn, mình có thể tự chọn cách xử lý phù hợp
 TECHNICAL_ERROR_RESPONSE = "Đã xảy ra lỗi khi xử lý yêu cầu của bạn: {error}"
 
 PROMPT_EXTRACT_MEMORY = """
-Bạn là công cụ trích xuất thông tin người dùng từ hội thoại.
-Nhiệm vụ của bạn là liệt kê các "sự thật" (facts) quan trọng về người dùng.
+Bạn là hệ thống trích xuất thông tin người dùng cho một AI assistant.
 
-Chỉ bao gồm các thông tin thuộc loại sau:
-- Sở thích (preferences)
-- Thói quen (habits)
-- Kỹ năng (skills)
-- Mục tiêu (goals)
-- Insight quan trọng
+Nhiệm vụ:
+Đọc hội thoại và trích xuất các "facts" quan trọng về người dùng để lưu vào memory dài hạn.
 
-Bỏ qua:
-- Các yêu cầu tạm thời (ví dụ: "hãy phân tích cột sales")
-- Câu hỏi một lần
-- Các nội dung trả lời của Assistant (chỉ tập trung vào thông tin về User)
+## OẠI THÔNG TIN CẦN TRÍCH XUẤT
 
-Quy tắc trích xuất:
-- Mỗi sự thật là 1 câu ngắn gọn.
-- Không gộp nhiều thông tin vào 1 câu.
-- Nếu không có thông tin hữu ích nào, trả về danh sách trống.
+Chỉ trích xuất các thông tin thuộc 5 nhóm sau:
+
+### 1. Identity (ƯU TIÊN CAO NHẤT)
+- Tên người dùng
+- Tuổi (nếu có)
+- Nghề nghiệp / vai trò (student, engineer, etc.)
+
+### 2. Goals (Mục tiêu)
+- Mục tiêu học tập
+- Mục tiêu nghề nghiệp
+- Mục tiêu dự án (AI, backend, ML...)
+
+### 3. Skills (Kỹ năng)
+- Python, ML, AI, backend, cloud, v.v.
+- Công nghệ người dùng đang học hoặc đã biết
+
+### 4. Preferences (Sở thích)
+- Thích công nghệ nào
+- Thích cách học nào
+- Thích framework/tool nào
+
+### 5. Habits / Behavior
+- Cách làm việc
+- Cách học
+- Thói quen kỹ thuật
+
+## LOẠI BỎ
+
+Không trích xuất:
+- Câu hỏi một lần (ví dụ: “redis là gì”)
+- Yêu cầu tạm thời (debug code, hỏi kiến thức ngắn hạn)
+- Nội dung của assistant (chỉ lấy thông tin USER)
+
+## QUY TẮC QUAN TRỌNG
+
+1. Nếu có thông tin rõ ràng về USER (đặc biệt là tên), BẮT BUỘC phải trích xuất.
+2. Không được bỏ qua thông tin chắc chắn chỉ vì nó đơn giản.
+3. Không được trả về danh sách rỗng nếu có bất kỳ identity / goal / skill nào.
+4. Mỗi fact phải là 1 câu độc lập, ngắn gọn.
+5. Không gộp nhiều ý vào 1 fact.
+
+## ƯU TIÊN TRÍCH XUẤT
+
+Ưu tiên theo thứ tự:
+
+1. Identity (cao nhất)
+2. Goals
+3. Skills
+4. Preferences
+5. Habits
 
 Hội thoại:
 User: {question}
